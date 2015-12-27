@@ -16,19 +16,6 @@
 
 using namespace llvm;
 
-//TODO: Kill this and use llvm instead.
-namespace helper {
-    // Cloning make_unique here until it's standard in C++14.
-    // Using a namespace to avoid conflicting with MSVC's std::make_unique (which
-    // ADL can sometimes find in unqualified calls).
-template <class T, class... Args>
- static
-    typename std::enable_if<!std::is_array<T>::value, std::unique_ptr<T>>::type
-    make_unique(Args &&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-    }
-}
-
 // http://llvm.org/docs/tutorial/LangImpl1.html#the-lexer
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
 // of these for known things.
@@ -240,7 +227,7 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 // and returns.
 // numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
-    auto Result = helper::make_unique<NumberExprAST>(NumVal);
+    auto Result = llvm::make_unique<NumberExprAST>(NumVal);
     getNextToken(); // consume the number
     return std::move(Result);
 }
@@ -276,7 +263,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
     getNextToken(); // eat identifier
 
     if (CurTok != '(') // Simple variable ref
-        return helper::make_unique<VariableExprAST>(IdName);
+        return llvm::make_unique<VariableExprAST>(IdName);
 
     // Call.
     getNextToken(); // Eat (
@@ -301,7 +288,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
     // Eat the ')'.
     getNextToken();
 
-    return helper::make_unique<CallExprAST>(IdName, std::move(Args));
+    return llvm::make_unique<CallExprAST>(IdName, std::move(Args));
 }
 
 // primary
@@ -372,7 +359,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
                 return nullptr;
         }
         // Merge LHS/RHS
-        LHS = helper::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+        LHS = llvm::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
     } // loop around to the top of the while loop
 }
 
@@ -401,7 +388,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     // success
     getNextToken(); // eat ')'
 
-    return helper::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
+    return llvm::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
 }
 
 // Function definition, just a prototype plus an expression to implement the body
@@ -412,7 +399,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
     if (!Proto) return nullptr;
 
     if (auto E = ParseExpression())
-        return helper::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     return nullptr;
 }
 
@@ -429,9 +416,9 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 // toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
     if (auto E = ParseExpression()) {
-        // Make anonymouse proto
-        auto Proto = helper::make_unique<PrototypeAST>("", std::vector<std::string>());
-        return helper::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+        // Make anonymous proto
+        auto Proto = llvm::make_unique<PrototypeAST>("", std::vector<std::string>());
+        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
 }
