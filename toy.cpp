@@ -1,4 +1,9 @@
 
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include <cctype>
 #include <cstdio>
 #include <map>
@@ -9,6 +14,9 @@
 #include <iostream>
 #include <memory>
 
+using namespace llvm;
+
+//TODO: Kill this and use llvm instead.
 namespace helper {
     // Cloning make_unique here until it's standard in C++14.
     // Using a namespace to avoid conflicting with MSVC's std::make_unique (which
@@ -113,6 +121,7 @@ static int gettok() {
 class ExprAST {
 public:
     virtual ~ExprAST() {}
+    virtual Value *codegen() = 0;
 };
 
 // NumberExprAST - Expression class for numeric literals like "1.0"
@@ -121,6 +130,7 @@ class NumberExprAST: public ExprAST {
 
 public:
     NumberExprAST(double Val) : Val(Val) {}
+    virtual Value *codegen();
 };
 
 // VariableExprAST - Expression class for referencing a variable, like "a".
@@ -129,6 +139,7 @@ class VariableExprAST : public ExprAST {
 
 public:
     VariableExprAST(const std::string &Name) : Name(Name) {};
+    virtual Value *codegen();
 };
 
 // BinaryExprAST - Expression class for a binary operator.
@@ -141,6 +152,7 @@ public:
             std::unique_ptr<ExprAST> LHS,
             std::unique_ptr<ExprAST> RHS) : 
         Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+    virtual Value *codegen();
 };
 
 // CallExprAST - Expression class for function calls.
@@ -152,6 +164,7 @@ public:
     CallExprAST(const std::string &Callee,
             std::vector<std::unique_ptr<ExprAST> > Args) :
         Callee(Callee), Args(std::move(Args)) {}
+    virtual Value *codegen();
 };
 
 // PrototypeAST - This class represents the "prototype" for a function
@@ -164,6 +177,7 @@ class PrototypeAST {
 public:
     PrototypeAST(const std::string &name, std::vector<std::string> Args) :
         Name(name), Args(std::move(Args)) {};
+    virtual Value *codegen();
 };
 
 // FunctionAST - This class represents a function definition itself.
@@ -175,6 +189,7 @@ public:
     FunctionAST(std::unique_ptr<PrototypeAST> Proto,
             std::unique_ptr<ExprAST> Body) :
         Proto(std::move(Proto)), Body(std::move(Body)) {}
+    virtual Value *codegen();
 };
 
 
@@ -422,12 +437,168 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 }
 
 // ================================================================
-// Top-Level parsing
+// Code Generation
+// ================================================================
+
+// Used during code generation
+// TheModule is an LLVM construct that contains functions and global variables.
+// It owns the memory for all of the IR we generate. (Also why codegen() returns raw Value* rather than unique_ptr(Value)
+// Builder is a helper object that makes it easy to generate LLVM instructions.
+// NamedValues keeps track of which values are defined in the current scope, 
+// and what their LLVM representation is.
+static std::unique_ptr<Module> *TheModule;
+static IRBuilder<> Builder(getGlobalContext());
+static std::map<std::string, Value*> NamedValues;
+
+Value *ErrorV(const char *Str) {
+    Error(Str);
+    return nullptr;
+}
+
+// Generate code for numeric literals
+// `APFloat` has the capability of holder fp constants of arbitrary precision.
+Value *NumberExprAst::codegen() {
+    return ConstantFP::get(getGlobalContext(), APFloat(Val));
+}
+
+// Generate code for variable expressions
+Value *VariableExprAST::codegen() {
+    // Look this variable up in the function
+    Value *V = NamedValues[Name];
+    if (!V) 
+        ErrorV("Unknown variable name");
+    return V;
+}
+
+// Generate code for binary expressions
+// Recursively emit code for the LHS then the RHS then compute the result.
+// LLVM instructions have strict rules, e.g. add - LHS and RHS must have the same type.
+// fcmp always returns an 'i1' value (a one bit integer).
+// We want 0.0 or 1.0 for this, so we use a uitofp instruction.
+Value *BinaryExprAST::codegen() {
+    Value *L = LHS->codegen();
+    Value *R = RHS->codegen();
+
+    if (!L || !R)
+        return nullptr;
+
+    switch (Op) {
+    case '+':
+        return Builder.CreateFAdd(L, R, "addtmp");
+    case '-':
+        return Builder.CreateFSub(L, R, "subtmp");
+    case '*':
+        return Builder.CreateFMul(L, R, "multmp");
+    case '<':
+        L = Builder.CreateFCmpULT(L, R, "cmptmp");
+        // Convert bool 0/1 to double 0.0 of 1.0
+        return Builder.CreateUIToFP(L, Type::getDoubleTy(getGlobalContext()), "booltmp");
+    default:
+        return ErrorV("invalid binary operator");
+    }
+}
+
+// Generate code for function calls
+// Lookup function name in the LLVM Module's symbol table.
+// We use the same name in the symbol table as what the user specifies.
+// Note that LLVM uses the native C calling conventions by default,
+// allowing these calls to also call into standard lib functions like `sin` and `cos`.
+Value *CallExprAST::codegen() {
+    // Look up the name in the global module table
+    Function *CalleeF = TheModule->getFunction(Callee);
+    if (!CalleeF)
+        return ErrorV("Unknown function referenced");
+
+    // If argument mismatch error
+    if (CalleeF->arg_size() != Args.size())
+        return ErrorV("Incorrect # arguments passed");
+
+    std::vector<Value *> ArgsV;
+    for (unsigned i = 0, e = Args.size(); i != e, ++i) {
+        ArgsV.push_back(Args[i]->codegen());
+        if (!ArgsV.back())
+            return nullptr;
+    }
+    return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+// Generate code for function declarations (prototypes)
+// All function types are Doubles for now
+Function *PrototypeAST::codegen() {
+    // Make the function type: double(double, double) etc.
+    std::vector<Type*> Doubles(Args.size(), 
+            Type::getDoubleTy(getGlobalContext()));
+    
+    // false specifies this is not a vargs function
+    FunctionType *FT = FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
+    // ExternalLinkage means function may be defined outside the current module
+    // or that it is callable by functions outside the module.
+    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule);
+
+    // Set names for all arguments.
+    unsigned Idx = 0;
+    for (auto &Arg : F->args())
+        Arg.setName(Args[Idx++]);
+
+    return F;
+}
+
+// Generate code for function bodies.
+// TODO: Fix bug listed at the end of this section: http://llvm.org/docs/tutorial/LangImpl3.html#function-code-generation
+Function *FunctionAST::codegen() {
+    // First, check for an existing function from a previous 'extern' declaration.
+    Function *TheFunction = TheModule->getFunction(Proto->getName());
+
+    // Otherwise, codegen from the prototype
+    if (!TheFunction)
+        TheFunction = Proto->codegen();
+
+    if (!TheFunction)
+        return nullptr;
+    
+    // Want to make sure that the function doesn't already have a body before we generate one.
+    if (!TheFunction->empty())
+        return (Function*)ErrorV("Function cannot be redefined.");
+
+    // Create a new basic block to start insertion into.
+    BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", TheFunction);
+    Builder.SetInsertPoint(BB);
+
+    // Record the function arguments in the NamedValues map.
+    // Add the function arguments to the NamedValues map, so they are accessible to the 
+    // `VariableExprAST` nodes
+    NamedValues.clear();
+    for (auto &Arg : TheFunction->args())
+        NamedValues[Arg.getName()] = &Arg;
+
+    // If no error, emit the ret instruction, which completes the function.
+    if (Value *RetVVal = Body->codegen()) {
+        // Finish off the function.
+        Builder.CreateRet(RetVal);
+
+        // Validate the generated code, checking for consistency. Function is provided by LLVM.
+        verifyFunction(*TheFunction);
+
+        return TheFunction;
+    }
+
+    // Error reading body, remove function.
+    TheFunction->eraseFromParent();
+    return nullptr;
+}
+
+
+
+// ================================================================
+// Top-Level parsing and JIT Driver
 // ================================================================
 
 static void HandleDefinition() {
-    if (ParseDefinition()) {
-        fprintf(stderr, "Parsed a function definition.\n");
+    if (auto FnAST = ParseDefinition()) {
+        if (auto *FnIR = FnAST->codegen()) {
+            fprintf(stderr, "Read function definition:");
+            FnIR->dump();
+        }
     } else {
         // Skip token for error recovery.
         getNextToken();
@@ -435,8 +606,11 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-    if (ParseExtern()) {
-        fprintf(stderr, "Parsed an extern\n");
+    if (auto ProtoAST = ParseExtern()) {
+        if (auto *FnIR = ProtoAST->codegen()) {
+            fprintf(stderr, "Parsed an extern\n");
+            FnIR->dump();
+        }
     } else {
         // Skip token for error recovery.
         getNextToken();
@@ -445,8 +619,11 @@ static void HandleExtern() {
 
 static void HandleTopLevelExpression() {
     // Evaluate a top-level expression into an anonymous function.
-    if (ParseTopLevelExpr()) {
-        fprintf(stderr, "Parsed a top-level expr\n");
+    if (auto FnAST = ParseTopLevelExpr()) {
+        if (auto *FnIR = FnAST->codegen()) {
+            fprintf(stderr, "Parsed a top-level expr\n");
+            FnIr->dump();
+        }
     } else {
         // Skip token for error recovery.
         getNextToken();
@@ -497,8 +674,14 @@ int main() {
     fprintf(stderr, "ready> ");
     getNextToken();
 
+    // Make the module, which holds all the code
+    TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
+
     // Run the main "interpreter loop" now.
     MainLoop();
+
+    // Print out all of the generated code
+    TheModule->dump();
 
     return 0;
 }

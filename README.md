@@ -22,3 +22,7 @@ def fib(x)
 fib(40)
 ```
 
+### References / TODO
+- http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
+- http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
+- https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.
