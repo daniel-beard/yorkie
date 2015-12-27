@@ -7,7 +7,7 @@ Toy language created by following: http://llvm.org/docs/tutorial/LangImpl1.html
 ### Progress
 - [X] Chapter 1: Introduction and the Lexer
 - [X] Chapter 2: Parser and AST
-- [ ] Chapter 3: Code generation to LLVM IR
+- [ ] Chapter 3: Code generation to LLVM IR - http://llvm.org/docs/tutorial/LangImpl3.html
 
 ### Language Syntax
 ```
