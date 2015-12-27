@@ -117,7 +117,7 @@ class NumberExprAST: public ExprAST {
 
 public:
     NumberExprAST(double Val) : Val(Val) {}
-    virtual Value *codegen();
+    Value *codegen() override;
 };
 
 // VariableExprAST - Expression class for referencing a variable, like "a".
@@ -126,7 +126,7 @@ class VariableExprAST : public ExprAST {
 
 public:
     VariableExprAST(const std::string &Name) : Name(Name) {};
-    virtual Value *codegen();
+    Value *codegen() override;
 };
 
 // BinaryExprAST - Expression class for a binary operator.
@@ -139,7 +139,7 @@ public:
             std::unique_ptr<ExprAST> LHS,
             std::unique_ptr<ExprAST> RHS) : 
         Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-    virtual Value *codegen();
+    Value *codegen() override;
 };
 
 // CallExprAST - Expression class for function calls.
@@ -151,7 +151,7 @@ public:
     CallExprAST(const std::string &Callee,
             std::vector<std::unique_ptr<ExprAST> > Args) :
         Callee(Callee), Args(std::move(Args)) {}
-    virtual Value *codegen();
+    Value *codegen() override;
 };
 
 // PrototypeAST - This class represents the "prototype" for a function
@@ -164,7 +164,8 @@ class PrototypeAST {
 public:
     PrototypeAST(const std::string &name, std::vector<std::string> Args) :
         Name(name), Args(std::move(Args)) {};
-    virtual Value *codegen();
+    Function *codegen();
+    const std::string &getName() const { return Name; }
 };
 
 // FunctionAST - This class represents a function definition itself.
@@ -176,9 +177,8 @@ public:
     FunctionAST(std::unique_ptr<PrototypeAST> Proto,
             std::unique_ptr<ExprAST> Body) :
         Proto(std::move(Proto)), Body(std::move(Body)) {}
-    virtual Value *codegen();
+    Function *codegen();
 };
-
 
 // ================================================================
 // Parser
@@ -281,7 +281,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
 
             if (CurTok != ',')
                 return Error("Expected ')' or ',' in argument list");
-            getNextToken();
+            getNextToken(); // eat the ','
         }
     }
 
@@ -433,7 +433,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 // Builder is a helper object that makes it easy to generate LLVM instructions.
 // NamedValues keeps track of which values are defined in the current scope, 
 // and what their LLVM representation is.
-static std::unique_ptr<Module> *TheModule;
+static std::unique_ptr<Module> TheModule;
 static IRBuilder<> Builder(getGlobalContext());
 static std::map<std::string, Value*> NamedValues;
 
@@ -444,7 +444,7 @@ Value *ErrorV(const char *Str) {
 
 // Generate code for numeric literals
 // `APFloat` has the capability of holder fp constants of arbitrary precision.
-Value *NumberExprAst::codegen() {
+Value *NumberExprAST::codegen() {
     return ConstantFP::get(getGlobalContext(), APFloat(Val));
 }
 
@@ -501,7 +501,7 @@ Value *CallExprAST::codegen() {
         return ErrorV("Incorrect # arguments passed");
 
     std::vector<Value *> ArgsV;
-    for (unsigned i = 0, e = Args.size(); i != e, ++i) {
+    for (unsigned i = 0, e = Args.size(); i != e; ++i) {
         ArgsV.push_back(Args[i]->codegen());
         if (!ArgsV.back())
             return nullptr;
@@ -520,7 +520,7 @@ Function *PrototypeAST::codegen() {
     FunctionType *FT = FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
     // ExternalLinkage means function may be defined outside the current module
     // or that it is callable by functions outside the module.
-    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule);
+    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
 
     // Set names for all arguments.
     unsigned Idx = 0;
@@ -559,7 +559,7 @@ Function *FunctionAST::codegen() {
         NamedValues[Arg.getName()] = &Arg;
 
     // If no error, emit the ret instruction, which completes the function.
-    if (Value *RetVVal = Body->codegen()) {
+    if (Value *RetVal = Body->codegen()) {
         // Finish off the function.
         Builder.CreateRet(RetVal);
 
@@ -609,7 +609,7 @@ static void HandleTopLevelExpression() {
     if (auto FnAST = ParseTopLevelExpr()) {
         if (auto *FnIR = FnAST->codegen()) {
             fprintf(stderr, "Parsed a top-level expr\n");
-            FnIr->dump();
+            FnIR->dump();
         }
     } else {
         // Skip token for error recovery.
