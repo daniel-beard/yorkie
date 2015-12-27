@@ -23,6 +23,11 @@ def fib(x)
 fib(40)
 ```
 
+### Building
+- Make sure you have LLVM setup - http://llvm.org/docs/GettingStarted.html
+- Run the command `make build`
+- Run the binary `./toy`
+
 ### References / TODO
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
 - http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
