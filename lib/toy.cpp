@@ -19,6 +19,9 @@
 #include <memory>
 #include "../include/KaleidoscopeJIT.h"
 
+// When defined, we enable JIT optimizations
+//#define OPTIMIZATIONS 1
+
 using namespace llvm;
 using namespace llvm::orc;
 
@@ -35,6 +38,13 @@ enum Token {
     // primary
     tok_identifier = -4,
     tok_number = -5,
+
+    // control flow
+    tok_if = -6,
+    tok_then = -7,
+    tok_else = -8,
+    tok_for = -9,
+    tok_in = -10,
 };
 
 static std::string IdentifierStr;   // Filled in if tok_identifier
@@ -60,6 +70,16 @@ static int gettok() {
             return tok_def;
         if (IdentifierStr == "extern")
             return tok_extern;
+        if (IdentifierStr == "if")
+            return tok_if;
+        if (IdentifierStr == "then")
+            return tok_then;
+        if (IdentifierStr == "else")
+            return tok_else;
+        if (IdentifierStr == "for")
+            return tok_for;
+        if (IdentifierStr == "in")
+            return tok_in;
 
         return tok_identifier;
     }
@@ -186,6 +206,31 @@ public:
     Function *codegen();
 };
 
+// IfExprAST - Expression class for if/then/else
+class IfExprAST : public ExprAST {
+    std::unique_ptr<ExprAST> Cond, Then, Else;
+
+public:
+    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
+            std::unique_ptr<ExprAST> Else)
+        : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+    Value *codegen();
+};
+
+// ForExprAST - Expression class for for/in.
+class ForExprAST : public ExprAST {
+    std::string VarName;
+    std::unique_ptr<ExprAST> Start, End, Step, Body;
+
+public:
+    ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
+            std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
+            std::unique_ptr<ExprAST> Body)
+        : VarName(VarName), Start(std::move(Start)), End(std::move(End)), 
+        Step(std::move(Step)), Body(std::move(Body)) {}
+    Value *codegen();
+};
+
 // ================================================================
 // Parser
 // ================================================================
@@ -193,6 +238,8 @@ public:
 // Method definitions
 static std::unique_ptr<ExprAST> ParsePrimary();
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS);
+static std::unique_ptr<ExprAST> ParseIfExpr();
+static std::unique_ptr<ExprAST> ParseForExpr();
 
 // CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
 // token the parser is looking at. getNextToken reads another token from the lexer
@@ -311,6 +358,10 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
             return ParseNumberExpr();
         case '(':
             return ParseParenExpr();
+        case tok_if:
+            return ParseIfExpr();
+        case tok_for:
+            return ParseForExpr();
     }
 }
 
@@ -427,6 +478,83 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
         return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
+}
+
+// If expression parsing
+// ifexpr ::= 'if' expression 'then' expression 'else' expression
+static std::unique_ptr<ExprAST> ParseIfExpr() {
+    getNextToken(); // eat the if
+
+    // condition
+    auto Cond = ParseExpression();
+    if (!Cond)
+        return nullptr;
+
+    if (CurTok != tok_then)
+        return Error("expected then");
+    getNextToken(); // eat the then
+
+    auto Then = ParseExpression();
+    if (!Then)
+        return nullptr;
+
+    if (CurTok != tok_else)
+        return Error("expected else");
+    getNextToken(); // eat the else
+
+    auto Else = ParseExpression();
+    if (!Else) 
+        return nullptr;
+
+    return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
+}
+
+// For expression parsing
+// The step value is optional
+// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
+static std::unique_ptr<ExprAST> ParseForExpr() {
+    getNextToken(); // eat the for.
+
+    if (CurTok != tok_identifier)
+        return Error("expected identifier after for");
+
+    std::string IdName = IdentifierStr;
+    getNextToken(); // eat identifier
+
+    if (CurTok != '=')
+        return Error("expected '=' after for");
+    getNextToken(); // eat '='
+
+    auto Start = ParseExpression();
+    if (!Start)
+        return nullptr;
+    if (CurTok != ',')
+        return Error("expected ',' after for start value");
+    getNextToken(); // eat ','
+
+    auto End = ParseExpression();
+    if (!End)
+        return nullptr;
+
+    // The step value is optional
+    std::unique_ptr<ExprAST> Step;
+    if (CurTok == ',') {
+        getNextToken(); // eat ','
+        Step = ParseExpression();
+        if (!Step)
+            return nullptr;
+    }
+
+    if (CurTok != tok_in)
+        return Error("expected 'in' after for");
+    getNextToken(); // eat 'in'.
+
+    auto Body = ParseExpression();
+    if (!Body)
+        return nullptr;
+
+    return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
+            std::move(End), std::move(Step), std::move(Body));
 }
 
 // ================================================================
@@ -589,8 +717,10 @@ Function *FunctionAST::codegen() {
         // Validate the generated code, checking for consistency. Function is provided by LLVM.
         verifyFunction(*TheFunction);
 
+#ifdef OPTIMIZATIONS
         // Optimize the function.
         TheFPM->run(*TheFunction);
+#endif
 
         return TheFunction;
     }
@@ -598,6 +728,165 @@ Function *FunctionAST::codegen() {
     // Error reading body, remove function.
     TheFunction->eraseFromParent();
     return nullptr;
+}
+
+// Generate code for if/then/else expressions.
+// We get the condition, and convert to a boolean value, then get the function we are 
+// currently in, by getting the current blocks parent.
+// TheFunction is passed into the `ThenBB` block so it's automatically inserted into the function.
+// Then we create the conditional branch that chooses between the blocks.
+Value *IfExprAST::codegen() {
+    Value *CondV = Cond->codegen();
+    if (!CondV)
+        return nullptr;
+
+    // Convert condition to a bool by comparing equal to 0.0
+    CondV = Builder.CreateFCmpONE(
+            CondV, ConstantFP::get(getGlobalContext(), APFloat(0.0)), "ifcond");
+
+    Function *TheFunction = Builder.GetInsertBlock()->getParent();
+
+    // Create blocks for the then and else cases. Insert the 'then' block at the 
+    // end of the function
+    BasicBlock *ThenBB = BasicBlock::Create(getGlobalContext(), "then", TheFunction);
+    BasicBlock *ElseBB = BasicBlock::Create(getGlobalContext(), "else");
+    BasicBlock *MergeBB = BasicBlock::Create(getGlobalContext(), "ifcont");
+
+    // Conditional branch
+    Builder.CreateCondBr(CondV, ThenBB, ElseBB);
+
+    // Emit then value.
+    Builder.SetInsertPoint(ThenBB);
+
+    Value *ThenV = Then->codegen();
+    if (!ThenV)
+        return nullptr;
+
+    Builder.CreateBr(MergeBB);
+    // Codegen of 'Then' can change the current block, update ThenBB for the PHI
+    // E.g. Then expression may contain a nested if/then/else, which would change
+    // the notion of the current block, so we have to get an up-to-date value for code that
+    // will set up the Phi node.
+    ThenBB = Builder.GetInsertBlock();
+
+    // Emit else block.
+    TheFunction->getBasicBlockList().push_back(ElseBB);
+    Builder.SetInsertPoint(ElseBB);
+
+    Value *ElseV = Else->codegen();
+    if (!ElseV)
+        return nullptr;
+
+    Builder.CreateBr(MergeBB);
+    // codegen of 'Else' can change the current block, update ElseBB for the PHI.
+    ElseBB = Builder.GetInsertBlock();
+
+    // Emit merge block.
+    TheFunction->getBasicBlockList().push_back(MergeBB);
+    Builder.SetInsertPoint(MergeBB);
+    PHINode *PN = Builder.CreatePHI(Type::getDoubleTy(getGlobalContext()), 2, "iftmp");
+
+    PN->addIncoming(ThenV, ThenBB);
+    PN->addIncoming(ElseV, ElseBB);
+    return PN;
+}
+
+// Generate code for 'for/in' expressions
+// With the introduction of for/in expressions, our symbol table can now contain function 
+// arguments or loop variables.
+// It's possible that a var with the same name exists in outer scope,
+// we choose to shadow the existing value in this case.
+// Output for-loop as:
+//   ...
+//   start = startexpr
+//   goto loop
+// loop:
+//   variable = phi [start, loopheader], [nextvariable, loopend]
+//   ...
+//   bodyexpr
+//   ...
+// loopend:
+//   step = stepexpr
+//   nextvariable = variable + step
+//   endcond = endexpr
+//   br endcond, loop, endloop
+// outloop:
+Value *ForExprAST::codegen() {
+    // Emit the start code first, without 'variable in scope.
+    Value *StartVal = Start->codegen();
+    if (!StartVal) 
+        return nullptr;
+
+    // Make the new basic block for the loop header, inserting after current block.
+    Function *TheFunction = Builder.GetInsertBlock()->getParent();
+    BasicBlock *PreheaderBB = Builder.GetInsertBlock();
+    BasicBlock *LoopBB = BasicBlock::Create(getGlobalContext(), "loop", TheFunction);
+
+    // Insert an explicit fall through from the current block to the LoopBB
+    Builder.CreateBr(LoopBB);
+
+    // Start insertion in LoopBB.
+    Builder.SetInsertPoint(LoopBB);
+
+    // Start the PHI node with an entry for Start.
+    PHINode *Variable = Builder.CreatePHI(Type::getDoubleTy(getGlobalContext()),
+            2, VarName.c_str());
+    Variable->addIncoming(StartVal, PreheaderBB);
+
+    // Within the loop, the variable is defined equal to the PHI node. If it
+    // shadows an existing variable, we have to restore it, so save it now.
+    Value *OldVal = NamedValues[VarName];
+    NamedValues[VarName] = Variable;
+
+    // Emit the body of the loop. This, like any other expr, can change the current BB
+    // Note that we ignore the value computed by the body, but don't allow an error.
+    if (!Body->codegen())
+        return nullptr;
+
+    // Emit the step value.
+    Value *StepVal = nullptr;
+    if (Step) {
+        StepVal = Step->codegen();
+        if (!StepVal)
+            return nullptr;
+    } else {
+        // If not specified, use 1.0
+        StepVal = ConstantFP::get(getGlobalContext(), APFloat(1.0));
+    }
+
+    Value *NextVar = Builder.CreateFAdd(Variable, StepVal, "nextvar");
+
+    // Compute the end condition
+    Value *EndCond = End->codegen();
+    if (!EndCond)
+        return nullptr;
+
+    // Convert condition to a bool by comparing equal to 0.0
+    EndCond = Builder.CreateFCmpONE(EndCond, 
+            ConstantFP::get(getGlobalContext(), APFloat(0.0)), "loopcond");
+
+    // Create the "after loop" block and insert it
+    BasicBlock *LoopEndBB = Builder.GetInsertBlock();
+    BasicBlock *AfterBB = BasicBlock::Create(getGlobalContext(), "afterloop", TheFunction);
+
+    // Insert the conditional branch into the end of LoopEndBB
+    Builder.CreateCondBr(EndCond, LoopBB, AfterBB);
+
+    // And new code with be inserted in AfterBB.
+    Builder.SetInsertPoint(AfterBB);
+
+    // Add a new entry to the PHI node for the backedge.
+    Variable->addIncoming(NextVar, LoopEndBB);
+
+    // Restore the unshadowed variable
+    if (OldVal) {
+        NamedValues[VarName] = OldVal;
+    } else {
+        NamedValues.erase(VarName);
+    }
+
+    // for expr always returns 0.0
+    return Constant::getNullValue(Type::getDoubleTy(getGlobalContext()));
 }
 
 // ================================================================
@@ -611,6 +900,7 @@ void InitializeModuleAndPassManager(void) {
     TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
     TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
 
+#ifdef OPTIMIZATIONS
     // Create a new pass manager and attach to it
     TheFPM = llvm::make_unique<llvm::legacy::FunctionPassManager>(TheModule.get());
 
@@ -624,6 +914,7 @@ void InitializeModuleAndPassManager(void) {
     TheFPM->add(createCFGSimplificationPass());
 
     TheFPM->doInitialization();
+#endif
 }
 
 
@@ -747,7 +1038,7 @@ int main() {
     BinopPrecedence['*'] = 40; // Highest
 
     // Prime the first token.
-    fprintf(stderr, "ready> ");
+    fprintf(stderr, "yorkie> ");
     getNextToken();
 
     // Initialize the JIT
@@ -764,9 +1055,4 @@ int main() {
 
     return 0;
 }
-
-
-
-
-
 

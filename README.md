@@ -11,7 +11,8 @@
 - [X] Chapter 2: Parser and AST
 - [X] Chapter 3: Code generation to LLVM IR 
 - [X] Chapter 4: Adding JIT and optimizer support 
-- [ ] Chapter 5: Extending the language: control flow - http://llvm.org/docs/tutorial/LangImpl5.html
+- [X] Chapter 5: Extending the language: control flow 
+- [ ] Chapter 6: Extending the language: user-defined operators
 
 ### Language Syntax
 ```
@@ -36,3 +37,4 @@ fib(40)
 - http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
 - https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.
 - http://llvm.org/docs/WritingAnLLVMPass.html#what-passmanager-does - LLVM Passes (used for optimizations)
+- Analyze if/then/else statements using the `opt` tool - http://llvm.org/docs/tutorial/LangImpl5.html#llvm-ir-for-if-then-else
