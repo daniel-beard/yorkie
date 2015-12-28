@@ -1,0 +1,15 @@
+language: cpp
+compiler:
+- clang 
+before_install:
+- if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
+- export PATH="$(pwd)/llvm/bin":$PATH
+- which llvm-config
+script:
+- make build
+after_success:
+- ls
+- echo "4+5;" | ./toy
+sudo: true
+os: linux
+dist: trusty
