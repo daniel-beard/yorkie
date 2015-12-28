@@ -3,7 +3,7 @@ compiler:
 - clang 
 before_install:
 - if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
-- export PATH="$(pwd)/clang+llvm-3.7.0-x86_64-linux-gnu-ubuntu-14.04.tar.xz/bin":$PATH
+- export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 script:
 - echo "done"
