@@ -1,5 +1,7 @@
-## Kaleidoscope
-Toy language created by following: http://llvm.org/docs/tutorial/LangImpl1.html
+## yorkie
+- yorkie is a toy ~~dog~~ language, implemented as a learning experience.
+- It is in *no* way ready to use for anything substantial.
+- Based on tutorial found here: http://llvm.org/docs/tutorial/LangImpl1.html
 
 ### License
 - MIT
