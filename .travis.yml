@@ -1,0 +1,10 @@
+language: cpp
+compiler:
+- clang 
+before_install:
+- if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
+script:
+- echo "done"
+sudo: true
+os: linux
+dist: trusty
