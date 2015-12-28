@@ -1,0 +1,7 @@
+syntax: glob
+
+# Mac OS X
+**DS_Store
+
+toy
+toy.dSYM
