@@ -7,6 +7,9 @@ before_install:
 - which llvm-config
 script:
 - make build
+after_success:
+- ls
+- echo "4+5;" | ./toy
 sudo: true
 os: linux
 dist: trusty
