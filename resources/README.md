@@ -2,7 +2,9 @@
 - This document gives some examples of the output LLVM IR from the yorkie language.
 - It is possible to generate the control-graph-flow images from LLVM IR with the following command:
 
+```
     llvm-as < t.ll | opt -analyze -view-cfg
+```
 
 - You can view the resulting `.dot` files in GraphViz.
 
@@ -43,6 +45,7 @@ ifcont:     ; preds = %else, %then
 ```
 
 Here's the control flow graph:
+
 ![simple branching example](simple-branch.png)
 
 ### Fibonacci
@@ -78,5 +81,6 @@ ifcont:                                           ; preds = %entry, %else
 ```
 
 Control flow graph:
+
 ![fibonacci control flow graph](fib.png)
 
