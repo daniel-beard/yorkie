@@ -6,7 +6,7 @@ before_install:
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 script:
-- echo "done"
+- make build
 sudo: true
 os: linux
 dist: trusty
