@@ -36,3 +36,4 @@ fib(40)
 - http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
 - https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.
 - http://llvm.org/docs/WritingAnLLVMPass.html#what-passmanager-does - LLVM Passes (used for optimizations)
+- Analyze if/then/else statements using the `opt` tool - http://llvm.org/docs/tutorial/LangImpl5.html#llvm-ir-for-if-then-else

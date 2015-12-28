@@ -19,6 +19,9 @@
 #include <memory>
 #include "../include/KaleidoscopeJIT.h"
 
+// When defined, we enable JIT optimizations
+//#define OPTIMIZATIONS 1
+
 using namespace llvm;
 using namespace llvm::orc;
 
@@ -35,6 +38,11 @@ enum Token {
     // primary
     tok_identifier = -4,
     tok_number = -5,
+
+    // control flow
+    tok_if = -6,
+    tok_then = -7,
+    tok_else = -8,
 };
 
 static std::string IdentifierStr;   // Filled in if tok_identifier
@@ -60,6 +68,12 @@ static int gettok() {
             return tok_def;
         if (IdentifierStr == "extern")
             return tok_extern;
+        if (IdentifierStr == "if")
+            return tok_if;
+        if (IdentifierStr == "then")
+            return tok_then;
+        if (IdentifierStr == "else")
+            return tok_else;
 
         return tok_identifier;
     }
@@ -186,6 +200,17 @@ public:
     Function *codegen();
 };
 
+// IfExprAST - Expression class for if/then/else
+class IfExprAST : public ExprAST {
+    std::unique_ptr<ExprAST> Cond, Then, Else;
+
+public:
+    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
+            std::unique_ptr<ExprAST> Else)
+        : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+    Value *codegen();
+};
+
 // ================================================================
 // Parser
 // ================================================================
@@ -193,6 +218,7 @@ public:
 // Method definitions
 static std::unique_ptr<ExprAST> ParsePrimary();
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS);
+static std::unique_ptr<ExprAST> ParseIfExpr();
 
 // CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
 // token the parser is looking at. getNextToken reads another token from the lexer
@@ -311,6 +337,8 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
             return ParseNumberExpr();
         case '(':
             return ParseParenExpr();
+        case tok_if:
+            return ParseIfExpr();
     }
 }
 
@@ -427,6 +455,35 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
         return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
+}
+
+// If expression parsing
+// ifexpr ::= 'if' expression 'then' expression 'else' expression
+static std::unique_ptr<ExprAST> ParseIfExpr() {
+    getNextToken(); // eat the if
+
+    // condition
+    auto Cond = ParseExpression();
+    if (!Cond)
+        return nullptr;
+
+    if (CurTok != tok_then)
+        return Error("expected then");
+    getNextToken(); // eat the then
+
+    auto Then = ParseExpression();
+    if (!Then)
+        return nullptr;
+
+    if (CurTok != tok_else)
+        return Error("expected else");
+    getNextToken(); // eat the else
+
+    auto Else = ParseExpression();
+    if (!Else) 
+        return nullptr;
+
+    return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
 }
 
 // ================================================================
@@ -589,8 +646,10 @@ Function *FunctionAST::codegen() {
         // Validate the generated code, checking for consistency. Function is provided by LLVM.
         verifyFunction(*TheFunction);
 
+#ifdef OPTIMIZATIONS
         // Optimize the function.
         TheFPM->run(*TheFunction);
+#endif
 
         return TheFunction;
     }
@@ -598,6 +657,67 @@ Function *FunctionAST::codegen() {
     // Error reading body, remove function.
     TheFunction->eraseFromParent();
     return nullptr;
+}
+
+// Generate code for if/then/else expressions.
+// We get the condition, and convert to a boolean value, then get the function we are 
+// currently in, by getting the current blocks parent.
+// TheFunction is passed into the `ThenBB` block so it's automatically inserted into the function.
+// Then we create the conditional branch that chooses between the blocks.
+Value *IfExprAST::codegen() {
+    Value *CondV = Cond->codegen();
+    if (!CondV)
+        return nullptr;
+
+    // Convert condition to a bool by comparing equal to 0.0
+    CondV = Builder.CreateFCmpONE(
+            CondV, ConstantFP::get(getGlobalContext(), APFloat(0.0)), "ifcond");
+
+    Function *TheFunction = Builder.GetInsertBlock()->getParent();
+
+    // Create blocks for the then and else cases. Insert the 'then' block at the 
+    // end of the function
+    BasicBlock *ThenBB = BasicBlock::Create(getGlobalContext(), "then", TheFunction);
+    BasicBlock *ElseBB = BasicBlock::Create(getGlobalContext(), "else");
+    BasicBlock *MergeBB = BasicBlock::Create(getGlobalContext(), "ifcont");
+
+    // Conditional branch
+    Builder.CreateCondBr(CondV, ThenBB, ElseBB);
+
+    // Emit then value.
+    Builder.SetInsertPoint(ThenBB);
+
+    Value *ThenV = Then->codegen();
+    if (!ThenV)
+        return nullptr;
+
+    Builder.CreateBr(MergeBB);
+    // Codegen of 'Then' can change the current block, update ThenBB for the PHI
+    // E.g. Then expression may contain a nested if/then/else, which would change
+    // the notion of the current block, so we have to get an up-to-date value for code that
+    // will set up the Phi node.
+    ThenBB = Builder.GetInsertBlock();
+
+    // Emit else block.
+    TheFunction->getBasicBlockList().push_back(ElseBB);
+    Builder.SetInsertPoint(ElseBB);
+
+    Value *ElseV = Else->codegen();
+    if (!ElseV)
+        return nullptr;
+
+    Builder.CreateBr(MergeBB);
+    // codegen of 'Else' can change the current block, update ElseBB for the PHI.
+    ElseBB = Builder.GetInsertBlock();
+
+    // Emit merge block.
+    TheFunction->getBasicBlockList().push_back(MergeBB);
+    Builder.SetInsertPoint(MergeBB);
+    PHINode *PN = Builder.CreatePHI(Type::getDoubleTy(getGlobalContext()), 2, "iftmp");
+
+    PN->addIncoming(ThenV, ThenBB);
+    PN->addIncoming(ElseV, ElseBB);
+    return PN;
 }
 
 // ================================================================
@@ -611,6 +731,7 @@ void InitializeModuleAndPassManager(void) {
     TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
     TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
 
+#ifdef OPTIMIZATIONS
     // Create a new pass manager and attach to it
     TheFPM = llvm::make_unique<llvm::legacy::FunctionPassManager>(TheModule.get());
 
@@ -624,6 +745,7 @@ void InitializeModuleAndPassManager(void) {
     TheFPM->add(createCFGSimplificationPass());
 
     TheFPM->doInitialization();
+#endif
 }
 
 
@@ -764,9 +886,4 @@ int main() {
 
     return 0;
 }
-
-
-
-
-
 
