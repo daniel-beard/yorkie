@@ -7,7 +7,8 @@ Toy language created by following: http://llvm.org/docs/tutorial/LangImpl1.html
 ### Progress
 - [X] Chapter 1: Introduction and the Lexer
 - [X] Chapter 2: Parser and AST
-- [ ] Chapter 3: Code generation to LLVM IR - http://llvm.org/docs/tutorial/LangImpl3.html
+- [X] Chapter 3: Code generation to LLVM IR 
+- [ ] Chapter 4: Adding JIT and optimizer support - http://llvm.org/docs/tutorial/LangImpl4.html
 
 ### Language Syntax
 ```
@@ -22,3 +23,12 @@ def fib(x)
 fib(40)
 ```
 
+### Building
+- Make sure you have LLVM setup - http://llvm.org/docs/GettingStarted.html
+- Run the command `make build`
+- Run the binary `./toy`
+
+### References / TODO
+- http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
+- http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
+- https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.

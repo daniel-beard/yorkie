@@ -1,8 +1,6 @@
-CXX=clang++
-FLAGS=-std=c++11 -stdlib=libc++ -g -O3
 all:
 
 build:
-	$(CXX) $(FLAGS) toy.cpp
+	clang++ -g -O3 toy.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core` -o toy
 
 .PHONY: all build
