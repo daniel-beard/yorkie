@@ -8,7 +8,8 @@ Toy language created by following: http://llvm.org/docs/tutorial/LangImpl1.html
 - [X] Chapter 1: Introduction and the Lexer
 - [X] Chapter 2: Parser and AST
 - [X] Chapter 3: Code generation to LLVM IR 
-- [ ] Chapter 4: Adding JIT and optimizer support - http://llvm.org/docs/tutorial/LangImpl4.html
+- [X] Chapter 4: Adding JIT and optimizer support 
+- [ } Chapter 5: Extending the language: control flow - http://llvm.org/docs/tutorial/LangImpl5.html
 
 ### Language Syntax
 ```
@@ -32,3 +33,4 @@ fib(40)
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
 - http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
 - https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.
+- http://llvm.org/docs/WritingAnLLVMPass.html#what-passmanager-doesr - LLVM Passes (used for optimizations)

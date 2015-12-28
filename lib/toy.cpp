@@ -1,9 +1,13 @@
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Transforms/Scalar.h"
 #include <cctype>
 #include <cstdio>
 #include <map>
@@ -13,8 +17,10 @@
 #include <vector>
 #include <iostream>
 #include <memory>
+#include "../include/KaleidoscopeJIT.h"
 
 using namespace llvm;
+using namespace llvm::orc;
 
 // http://llvm.org/docs/tutorial/LangImpl1.html#the-lexer
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
@@ -417,7 +423,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
     if (auto E = ParseExpression()) {
         // Make anonymous proto
-        auto Proto = llvm::make_unique<PrototypeAST>("", std::vector<std::string>());
+        auto Proto = llvm::make_unique<PrototypeAST>("__anon_expr", std::vector<std::string>());
         return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
@@ -436,9 +442,26 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 static std::unique_ptr<Module> TheModule;
 static IRBuilder<> Builder(getGlobalContext());
 static std::map<std::string, Value*> NamedValues;
+static std::unique_ptr<llvm::legacy::FunctionPassManager> TheFPM;
+static std::unique_ptr<KaleidoscopeJIT> TheJIT;
+static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 Value *ErrorV(const char *Str) {
     Error(Str);
+    return nullptr;
+}
+
+Function *getFunction(std::string Name) {
+    // First, see if the function has already been added to the current module.
+    if (auto *F = TheModule->getFunction(Name))
+        return F;
+
+    // If not, check whether we can codegen the declaration from some existing prototype.
+    auto FI = FunctionProtos.find(Name);
+    if (FI != FunctionProtos.end()) 
+        return FI->second->codegen();
+
+    // If no existing prototype exists, return null.
     return nullptr;
 }
 
@@ -492,7 +515,7 @@ Value *BinaryExprAST::codegen() {
 // allowing these calls to also call into standard lib functions like `sin` and `cos`.
 Value *CallExprAST::codegen() {
     // Look up the name in the global module table
-    Function *CalleeF = TheModule->getFunction(Callee);
+    Function *CalleeF = getFunction(Callee);
     if (!CalleeF)
         return ErrorV("Unknown function referenced");
 
@@ -533,12 +556,12 @@ Function *PrototypeAST::codegen() {
 // Generate code for function bodies.
 // TODO: Fix bug listed at the end of this section: http://llvm.org/docs/tutorial/LangImpl3.html#function-code-generation
 Function *FunctionAST::codegen() {
-    // First, check for an existing function from a previous 'extern' declaration.
-    Function *TheFunction = TheModule->getFunction(Proto->getName());
 
-    // Otherwise, codegen from the prototype
-    if (!TheFunction)
-        TheFunction = Proto->codegen();
+    // Transfer ownership of the prototype to the FunctionProtos map, but keep a
+    // reference to it for use below.
+    auto &P = *Proto;
+    FunctionProtos[Proto->getName()] = std::move(Proto);
+    Function *TheFunction = getFunction(P.getName());
 
     if (!TheFunction)
         return nullptr;
@@ -566,6 +589,9 @@ Function *FunctionAST::codegen() {
         // Validate the generated code, checking for consistency. Function is provided by LLVM.
         verifyFunction(*TheFunction);
 
+        // Optimize the function.
+        TheFPM->run(*TheFunction);
+
         return TheFunction;
     }
 
@@ -574,6 +600,31 @@ Function *FunctionAST::codegen() {
     return nullptr;
 }
 
+// ================================================================
+// Optimizer
+// ================================================================
+
+// Initializes the global module `TheModule` and attaches a function pass manager
+// Pass manager currently has four optimization passes.
+void InitializeModuleAndPassManager(void) {
+    // Open a new module.
+    TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
+    TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
+
+    // Create a new pass manager and attach to it
+    TheFPM = llvm::make_unique<llvm::legacy::FunctionPassManager>(TheModule.get());
+
+    // Do simple "peephole" optimizations and bit-twiddling optmizations.
+    TheFPM->add(createInstructionCombiningPass());
+    // Reassociate expressions
+    TheFPM->add(createReassociatePass());
+    // Eliminate common subexpressions
+    TheFPM->add(createGVNPass());
+    // Simplify the control flow graph (deleting unreachable blocks, etc).
+    TheFPM->add(createCFGSimplificationPass());
+
+    TheFPM->doInitialization();
+}
 
 
 // ================================================================
@@ -585,6 +636,8 @@ static void HandleDefinition() {
         if (auto *FnIR = FnAST->codegen()) {
             fprintf(stderr, "Read function definition:");
             FnIR->dump();
+            TheJIT->addModule(std::move(TheModule));
+            InitializeModuleAndPassManager();
         }
     } else {
         // Skip token for error recovery.
@@ -597,6 +650,7 @@ static void HandleExtern() {
         if (auto *FnIR = ProtoAST->codegen()) {
             fprintf(stderr, "Parsed an extern\n");
             FnIR->dump();
+            FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
         }
     } else {
         // Skip token for error recovery.
@@ -607,9 +661,24 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
     // Evaluate a top-level expression into an anonymous function.
     if (auto FnAST = ParseTopLevelExpr()) {
-        if (auto *FnIR = FnAST->codegen()) {
-            fprintf(stderr, "Parsed a top-level expr\n");
-            FnIR->dump();
+        if (FnAST->codegen()) {
+            
+            // JIT the module containing the anonymous expression, keeping a handle so
+            // we can free it later
+            auto H = TheJIT->addModule(std::move(TheModule));
+            InitializeModuleAndPassManager();
+
+            // Search the JIT for the __anon_expr symbol.
+            auto ExprSymbol = TheJIT->findSymbol("__anon_expr");
+            assert(ExprSymbol && "Function not found");
+
+            // Get the symbol's address and cast it to the right type (takes no
+            // arguments, returns a double), so we can call it as a native function
+            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
+            fprintf(stderr, "Evaluated to %f\n", FP());
+        
+            // Delete the anonymous expression module from the JIT
+            TheJIT->removeModule(H);
         }
     } else {
         // Skip token for error recovery.
@@ -646,10 +715,30 @@ static void MainLoop() {
 }
 
 // ================================================================
+// "Library" functions that can be "extern'd" from user code.
+// ================================================================
+
+// putchard - putchar that takes a double and returns 0.
+extern "C" double putchard(double X) {
+    fputc((char)X, stderr);
+    return 0;
+}
+
+// printd - printf that takes a double and prints it as "%f\n", returning 0.
+extern "C" double printd(double X) {
+    fprintf(stderr, "%f\n", X);
+    return 0;
+}
+
+// ================================================================
 // Main Driver code.
 // ================================================================
 
 int main() {
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+    
     // Install standard binary operators
     // 1 is lowest precendence
     BinopPrecedence['<'] = 10;
@@ -661,8 +750,11 @@ int main() {
     fprintf(stderr, "ready> ");
     getNextToken();
 
-    // Make the module, which holds all the code
-    TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
+    // Initialize the JIT
+    TheJIT = llvm::make_unique<KaleidoscopeJIT>();
+
+    // Setup the module and the optimizer
+    InitializeModuleAndPassManager();
 
     // Run the main "interpreter loop" now.
     MainLoop();
