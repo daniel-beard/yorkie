@@ -57,6 +57,8 @@ fib(40)
 - Run the binary `./toy`
 
 ### References / TODO
+- [ ] Add examples folder
+- [ ] Add mandlebrot renderer - http://llvm.org/docs/tutorial/LangImpl6.html#kicking-the-tires
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
 - http://llvm.org/docs/LangRef.html#call-instruction LLVM call instructions
 - https://en.wikipedia.org/wiki/Visitor_pattern Visitor pattern, would be better to use for codegen.
