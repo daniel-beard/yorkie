@@ -26,6 +26,10 @@ if x < 3 then
 else 
     2
 
+# Forward declarations and calling 'C' code
+extern sin(x) # Because we link against libm, we can use that function natively here!
+sin(10)
+
 # Control Flow - for loops
 # (initial value), (end condition), (optional step value)
 for i = 1, i < n, 1.0 in 
