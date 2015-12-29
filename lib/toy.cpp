@@ -254,6 +254,17 @@ public:
     Value *codegen();
 };
 
+// UnaryExprAST - Expression class for a unary operator.
+class UnaryExprAST : public ExprAST {
+    char Opcode;
+    std::unique_ptr<ExprAST> Operand;
+
+public:
+    UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
+        : Opcode(Opcode), Operand(std::move(Operand)) {}
+    Value *codegen();
+};
+
 // ================================================================
 // Parser
 // ================================================================
@@ -263,6 +274,7 @@ static std::unique_ptr<ExprAST> ParsePrimary();
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS);
 static std::unique_ptr<ExprAST> ParseIfExpr();
 static std::unique_ptr<ExprAST> ParseForExpr();
+static std::unique_ptr<ExprAST> ParseUnary();
 
 // CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
 // token the parser is looking at. getNextToken reads another token from the lexer
@@ -290,7 +302,7 @@ std::unique_ptr<PrototypeAST> ErrorP(const char *Str) {
 // expression
 //  ::= primary binoprhs
 static std::unique_ptr<ExprAST> ParseExpression() {
-    auto LHS = ParsePrimary();
+    auto LHS = ParseUnary();
     if (!LHS)
         return nullptr;
 
@@ -425,8 +437,8 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
         int BinOp = CurTok;
         getNextToken(); // eat binop
 
-        // Parse the primary expression after the binary operator
-        auto RHS = ParsePrimary();
+        // Parse the unary expression after the binary operator
+        auto RHS = ParseUnary();
         if (!RHS)
             return nullptr;
 
@@ -461,6 +473,15 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
         FnName = IdentifierStr;
         Kind = 0;
         getNextToken(); // eat identifier
+        break;
+    case tok_unary:
+        getNextToken(); // eat 'unary'
+        if (!isascii(CurTok))
+            return ErrorP("Expected unary operator");
+        FnName = "unary";
+        FnName += (char)CurTok;
+        Kind = 1;
+        getNextToken(); // eat ascii operator
         break;
     case tok_binary:
         getNextToken(); // eat 'binary'
@@ -610,6 +631,27 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 
     return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
+}
+
+// Parse unary expression
+// If we see a unary operator when parsing a primary operator, eat the operator and parse 
+// the remaining piece as another unary operator.
+// This lets us handle multiple unary operators (e.g. '!!x')
+// Unary operators aren't ambiguous, so no need for precedence.
+// unary
+//  ::= primary
+//  ::= '!' unary
+static std::unique_ptr<ExprAST> ParseUnary() {
+    // If the current token is not an operator, it must be a primary expr.
+    if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+        return ParsePrimary();
+
+    // If this is a unary operator, read it.
+    int Opc = CurTok;
+    getNextToken(); // eat unary operator
+    if (auto Operand = ParseUnary())
+        return llvm::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+    return nullptr;
 }
 
 // ================================================================
@@ -954,6 +996,19 @@ Value *ForExprAST::codegen() {
 
     // for expr always returns 0.0
     return Constant::getNullValue(Type::getDoubleTy(getGlobalContext()));
+}
+
+// Generate code for unary expressions
+Value *UnaryExprAST::codegen() {
+    Value *OperandV = Operand->codegen();
+    if (!OperandV)
+        return nullptr;
+
+    Function *F = getFunction(std::string("unary") + Opcode);
+    if (!F)
+        return ErrorV("Unknown unary operator");
+
+    return Builder.CreateCall(F, OperandV, "unop");
 }
 
 // ================================================================
