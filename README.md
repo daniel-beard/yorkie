@@ -61,6 +61,13 @@ fib(40)
 - Run the binary `./toy`
 
 ### References / TODO
+- [ ] Finish chapters
+- [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
+- [ ] Function definitions should have commas between parameters
+- [ ] If statements should support multiple expressions
+- [ ] If statements should have an `end` keyword
+- [ ] If statements should have an `if/end` variant (without `else`).
+- [ ] If statements should have an `elseif` variant
 - [ ] Add examples folder
 - [ ] Add mandlebrot renderer - http://llvm.org/docs/tutorial/LangImpl6.html#kicking-the-tires
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
