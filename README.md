@@ -41,6 +41,11 @@ def fib(x)
 
 # This expression will compute the 40th number.
 fib(40)
+
+# Mutable variables
+def foo()
+    var x = 10 in 
+        x = 11
 ```
 
 ### Building
@@ -61,6 +66,9 @@ fib(40)
 - [ ] If statements should have an `if/end` variant (without `else`).
 - [ ] If statements should have an `elseif` variant
 - [ ] Add examples folder
+- [ ] Add types
+- [ ] Add arrays
+- [ ] Add simple string type (array of chars)
 - [ ] Add mandlebrot renderer - http://llvm.org/docs/tutorial/LangImpl6.html#kicking-the-tires
 
 ### Progress
