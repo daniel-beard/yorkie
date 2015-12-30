@@ -1,6 +1,6 @@
 ## yorkie [![Build Status](https://travis-ci.org/daniel-beard/yorkie.svg)](https://travis-ci.org/daniel-beard/yorkie)
 - yorkie is a toy ~~dog~~ language, implemented as a learning experience.
-- It is in *not* intended for actual use.
+- It is *not* intended for actual use.
 - Based on the LLVM tutorial: http://llvm.org/docs/tutorial/LangImpl1.html
 
 ### Language Syntax
@@ -53,6 +53,7 @@ fib(40)
 
 ### TODO
 - [ ] Finish chapters
+- [ ] Chapter 7, the CreateArgumentAllocas method no longer exists in the full code listing, it should be updated to reflect that the code is just added to the function::codegen() instead.
 - [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions
@@ -69,7 +70,8 @@ fib(40)
 - [X] Chapter 4: Adding JIT and optimizer support 
 - [X] Chapter 5: Extending the language: control flow 
 - [X] Chapter 6: Extending the language: user-defined operators
-- [ ] Chapter 7: Extending the language: Mutable Variables.
+- [X] Chapter 7: Extending the language: Mutable Variables.
+- [ ] Chapter 8: Adding debug information
 
 ### References / Links
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
