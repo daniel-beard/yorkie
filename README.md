@@ -57,12 +57,17 @@ def foo()
 - MIT
 
 ### TODO
+- [ ] Add extra dump methods to the rest of the AST declarations
 - [ ] Finish chapters
 - [ ] Chapter 7, the CreateArgumentAllocas method no longer exists in the full code listing, it should be updated to reflect that the code is just added to the function::codegen() instead.
+- [ ] Chapter 8.6 Functions, Should say to add to FunctionAST::codegen() instead of PrototypeAST...
 - [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions
 - [ ] If statements should have an `end` keyword
+- [ ] Functions should have an `end` keyword
+- [ ] Loops should have an end keyword
+- [ ] var declarations should have an `end` keyword
 - [ ] If statements should have an `if/end` variant (without `else`).
 - [ ] If statements should have an `elseif` variant
 - [ ] Add examples folder
