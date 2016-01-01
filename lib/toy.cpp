@@ -51,6 +51,9 @@ enum Token {
 
     // var definition
     tok_var = -13,
+
+    // end keyword
+    tok_end = -14,
 };
 
 static std::string IdentifierStr;   // Filled in if tok_identifier
@@ -130,6 +133,8 @@ static int gettok() {
             return tok_unary;
         if (IdentifierStr == "var")
             return tok_var;
+        if (IdentifierStr == "end")
+            return tok_end;
 
         return tok_identifier;
     }
@@ -365,6 +370,10 @@ std::unique_ptr<PrototypeAST> ErrorP(const char *Str) {
     Error(Str);
     return nullptr;
 }
+std::unique_ptr<FunctionAST> ErrorF(const char *Str) {
+    Error(Str);
+    return nullptr;
+}
 
 // Expression parsing
 
@@ -454,6 +463,9 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
 //  ::= identifierexpr
 //  ::= numberexpr
 //  ::= parenexpr
+//  ::= ifexpr
+//  ::= forexpr
+//  ::= varexpr
 static std::unique_ptr<ExprAST> ParsePrimary() {
     switch (CurTok) {
         default:
@@ -601,15 +613,22 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 }
 
 // Function definition, just a prototype plus an expression to implement the body
-// definition ::= 'def' prototype expression
+// definition ::= 'def' prototype expression 'end'
 static std::unique_ptr<FunctionAST> ParseDefinition() {
     getNextToken(); // eat def.
     auto Proto = ParsePrototype();
     if (!Proto) return nullptr;
 
-    if (auto E = ParseExpression())
-        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-    return nullptr;
+    auto E = ParseExpression();
+    if (!E) 
+        return nullptr;
+
+    if (CurTok != tok_end)
+        return ErrorF("expected 'end' after function definition");
+
+    getNextToken(); // eat 'end'
+
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
 }
 
 // Support extern to declare functions like 'sin' and 'cos' as well as to support
@@ -634,7 +653,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 }
 
 // If expression parsing
-// ifexpr ::= 'if' expression 'then' expression 'else' expression
+// ifexpr ::= 'if' expression 'then' expression 'else' expression 'end'
 static std::unique_ptr<ExprAST> ParseIfExpr() {
     getNextToken(); // eat the if
 
@@ -658,6 +677,10 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
     auto Else = ParseExpression();
     if (!Else) 
         return nullptr;
+
+    if (CurTok != tok_end)
+        return Error("expected 'end' after if expression");
+    getNextToken(); // eat 'end'
 
     return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
 }
@@ -706,6 +729,10 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
     if (!Body)
         return nullptr;
 
+    if (CurTok != tok_end)
+        return Error("expected 'end' after for");
+    getNextToken(); // eat 'end'
+
     return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
 }
@@ -732,7 +759,7 @@ static std::unique_ptr<ExprAST> ParseUnary() {
 }
 
 // varexpr ::= 'var' identifier ('=' expression)?
-//                  (',' identifier ('=' expression)?* 'in' expression
+//                  (',' identifier ('=' expression)?* 'in' expression 'end'
 static std::unique_ptr<ExprAST> ParseVarExpr() {
     getNextToken(); // eat the 'var'.
 
@@ -777,6 +804,10 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     auto Body = ParseExpression();
     if (!Body)
         return nullptr;
+
+    if (CurTok != tok_end)
+        return Error("expected 'end' after 'var'");
+    getNextToken(); // eat 'end'
 
     return llvm::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
 }

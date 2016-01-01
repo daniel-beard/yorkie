@@ -20,3 +20,6 @@
 #### Additional language features required:
 - The ability to mutate variables with the ‘=’ operator.
 - The ability to define new variables.
+
+### Compiling C down to LLVM IR
+`clang -S -emit-llvm foo.c`

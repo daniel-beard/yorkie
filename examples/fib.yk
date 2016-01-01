@@ -1,7 +1,18 @@
-def fib(x)
-  if x < 3 then
-    1
-  else
-    fib(x-1)+fib(x-2);
 
-fib(10)
+extern putchard(x);
+putchard(42);
+
+#def foo(x)
+#    x + 5
+#end
+
+#def fib(x)
+#  if x < 3 then
+#    1
+#  else
+#    fib(x-1)+fib(x-2)
+#  end
+#end
+
+#fib(10)
+#foo(10)
