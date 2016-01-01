@@ -1,6 +1,8 @@
 
 #include "llvm/ADT/STLExtras.h"
+//#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -18,9 +20,6 @@
 #include <iostream>
 #include <memory>
 #include "../include/KaleidoscopeJIT.h"
-
-// When defined, we enable JIT optimizations
-#define OPTIMIZATIONS 1
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -52,10 +51,51 @@ enum Token {
 
     // var definition
     tok_var = -13,
+
+    // end keyword
+    tok_end = -14,
 };
 
 static std::string IdentifierStr;   // Filled in if tok_identifier
 static double NumVal;               // Filled in if tok_number
+
+// IR Builder.
+static IRBuilder<> Builder(getGlobalContext());
+
+// Source Location Information
+struct SourceLocation {
+    int Line;
+    int Col;
+};
+static SourceLocation CurLoc;
+static SourceLocation LexLoc = {1, 0};
+
+// Forward declarations for KSDbgInfo
+namespace {
+class ProtoTypeAST;
+class ExprAST;
+}
+
+struct DebugInfo {
+    DICompileUnit *TheCU;
+    DIType *DblTy;
+    std::vector<DIScope *> LexicalBlocks;
+
+    void emitLocation(ExprAST *AST);
+    DIType *getDoubleTy();
+} KSDbgInfo;
+
+static int advance() {
+    int LastChar = getchar();
+
+    if (LastChar == '\n' || LastChar == '\r') {
+        LexLoc.Line++;
+        LexLoc.Col = 0;
+    } else {
+        LexLoc.Col++;
+    }
+    return LastChar;
+}
 
 /// gettok - Return the next token from standard input.
 static int gettok() {
@@ -63,13 +103,13 @@ static int gettok() {
 
     // Skip any whitespace
     while (isspace(LastChar)) {
-        LastChar = getchar();
+        LastChar = advance();
     }
 
     // Recognize identifiers and specific keywords like 'def'
     if (isalpha(LastChar)) { // identifier: [a-zA-Z][a-zA-Z0-9]*
         IdentifierStr = LastChar;
-        while (isalnum((LastChar = getchar()))) {
+        while (isalnum((LastChar = advance()))) {
             IdentifierStr += LastChar;
         }
 
@@ -93,6 +133,8 @@ static int gettok() {
             return tok_unary;
         if (IdentifierStr == "var")
             return tok_var;
+        if (IdentifierStr == "end")
+            return tok_end;
 
         return tok_identifier;
     }
@@ -103,7 +145,7 @@ static int gettok() {
         std::string NumStr;
         do {
             NumStr += LastChar;
-            LastChar = getchar();
+            LastChar = advance();
         } while (isdigit(LastChar) || LastChar == '.');
 
         NumVal = strtod(NumStr.c_str(), 0);
@@ -115,7 +157,7 @@ static int gettok() {
     if (LastChar == '#') {
         // Comment until end of line.
         do {
-            LastChar = getchar();
+            LastChar = advance();
         } while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
 
         if (LastChar != EOF) {
@@ -125,7 +167,7 @@ static int gettok() {
 
     // If the input doesn't match one of the above cases, it is either an operator
     // character like '+' or the end of file. Handle these below.
-    
+
     // Check for end of file. Don't eat the EOF
     if (LastChar == EOF) {
         return tok_eof;
@@ -133,7 +175,7 @@ static int gettok() {
 
     // Otherwise, just return the character as its ascii value.
     int ThisChar = LastChar;
-    LastChar = getchar();
+    LastChar = advance();
     return ThisChar;
 }
 
@@ -142,12 +184,21 @@ static int gettok() {
 // ================================================================
 
 // For now we are going to have expressions, prototypes and a function AST object.
+namespace {
 
 // ExprAST - Base class for all expression nodes.
 class ExprAST {
+    SourceLocation Loc;
+
 public:
+    ExprAST(SourceLocation Loc = CurLoc) : Loc(Loc) {}
     virtual ~ExprAST() {}
     virtual Value *codegen() = 0;
+    int getLine() const { return Loc.Line; }
+    int getCol() const { return Loc.Col; }
+    virtual raw_ostream &dump(raw_ostream &out, int ind) {
+        return out << ':' << getLine() << ':' << getCol() << '\n';
+    }
 };
 
 // NumberExprAST - Expression class for numeric literals like "1.0"
@@ -188,10 +239,11 @@ class BinaryExprAST : public ExprAST {
     std::unique_ptr<ExprAST> LHS, RHS;
 
 public:
-    BinaryExprAST(char op,
+    BinaryExprAST(SourceLocation Loc,
+            char op,
             std::unique_ptr<ExprAST> LHS,
-            std::unique_ptr<ExprAST> RHS) : 
-        Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+            std::unique_ptr<ExprAST> RHS) :
+         ExprAST(Loc), Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
     Value *codegen() override;
 };
 
@@ -216,11 +268,14 @@ class PrototypeAST {
     std::vector<std::string> Args;
     bool IsOperator;
     unsigned Precedence; // Precedence if a binary op.
+    int Line;
 
 public:
-    PrototypeAST(const std::string &name, std::vector<std::string> Args, 
-            bool IsOperator = false, unsigned Prec = 0) :
-        Name(name), Args(std::move(Args)), IsOperator(IsOperator), Precedence(Prec) {};
+    PrototypeAST(SourceLocation Loc, const std::string &name,
+            std::vector<std::string> Args, bool IsOperator = false, unsigned Prec = 0)
+        : Name(name), Args(std::move(Args)), IsOperator(IsOperator),
+        Precedence(Prec), Line(Loc.Line) {};
+    Function *codegen();
     const std::string &getName() const { return Name; }
 
     bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
@@ -232,8 +287,7 @@ public:
     }
 
     unsigned getBinaryPrecedence() const { return Precedence; }
-
-    Function *codegen();
+    int getLine() const { return Line; }
 };
 
 // FunctionAST - This class represents a function definition itself.
@@ -268,7 +322,7 @@ public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
             std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
             std::unique_ptr<ExprAST> Body)
-        : VarName(VarName), Start(std::move(Start)), End(std::move(End)), 
+        : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
         Step(std::move(Step)), Body(std::move(Body)) {}
     Value *codegen();
 };
@@ -283,6 +337,8 @@ public:
         : Opcode(Opcode), Operand(std::move(Operand)) {}
     Value *codegen();
 };
+
+} // end anonymous namespace
 
 // ================================================================
 // Parser
@@ -314,6 +370,10 @@ std::unique_ptr<PrototypeAST> ErrorP(const char *Str) {
     Error(Str);
     return nullptr;
 }
+std::unique_ptr<FunctionAST> ErrorF(const char *Str) {
+    Error(Str);
+    return nullptr;
+}
 
 // Expression parsing
 
@@ -341,7 +401,7 @@ static std::unique_ptr<ExprAST> ParseNumberExpr() {
 }
 
 // Parenthesis Operator
-// Demonstrates error routines, expects that the current token is `(`, but there may not be 
+// Demonstrates error routines, expects that the current token is `(`, but there may not be
 // a corresponding `)` token.
 // We return null on an error.
 // We recursively call ParseExpression, this is powerful because we can handle recursive grammars.
@@ -384,7 +444,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
                 return nullptr;
             }
 
-            if (CurTok == ')') 
+            if (CurTok == ')')
                 break;
 
             if (CurTok != ',')
@@ -403,6 +463,9 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
 //  ::= identifierexpr
 //  ::= numberexpr
 //  ::= parenexpr
+//  ::= ifexpr
+//  ::= forexpr
+//  ::= varexpr
 static std::unique_ptr<ExprAST> ParsePrimary() {
     switch (CurTok) {
         default:
@@ -439,9 +502,9 @@ static int GetTokPrecedence() {
     return TokPrec;
 }
 
-// Parse sequences of pairs. Takes a precendence and a pointer to an expression for the 
+// Parse sequences of pairs. Takes a precendence and a pointer to an expression for the
 // part that has been parsed so far.
-// The precendence passed into `ParseBinOpRHS` indicates the minimal operator precendence that 
+// The precendence passed into `ParseBinOpRHS` indicates the minimal operator precendence that
 // the function is allowed to eat.
 // binoprhs
 //  ::= ('+' primary)*
@@ -452,11 +515,12 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
 
         // If this is a binop that binds at least as tightly as the current binop,
         // consume it, otherwise we are done.
-        if (TokPrec < ExprPrec) 
+        if (TokPrec < ExprPrec)
             return LHS;
 
         // Okay, we know this is a binop.
         int BinOp = CurTok;
+        SourceLocation BinLoc = CurLoc;
         getNextToken(); // eat binop
 
         // Parse the unary expression after the binary operator
@@ -473,7 +537,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
                 return nullptr;
         }
         // Merge LHS/RHS
-        LHS = llvm::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+        LHS = llvm::make_unique<BinaryExprAST>(BinLoc, BinOp, std::move(LHS), std::move(RHS));
     } // loop around to the top of the while loop
 }
 
@@ -484,6 +548,8 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
 //  ::= binary LETTER number? (id, id)
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
     std::string FnName;
+
+    SourceLocation FnLoc = CurLoc;
 
     unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
     unsigned BinaryPrecedence = 30;
@@ -542,20 +608,27 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     if (Kind > 0 && ArgNames.size() != Kind)
         return ErrorP("Invalid number of operands for operator");
 
-    return llvm::make_unique<PrototypeAST>(FnName, ArgNames, Kind != 0,
+    return llvm::make_unique<PrototypeAST>(FnLoc, FnName, ArgNames, Kind != 0,
             BinaryPrecedence);
 }
 
 // Function definition, just a prototype plus an expression to implement the body
-// definition ::= 'def' prototype expression
+// definition ::= 'def' prototype expression 'end'
 static std::unique_ptr<FunctionAST> ParseDefinition() {
     getNextToken(); // eat def.
     auto Proto = ParsePrototype();
     if (!Proto) return nullptr;
 
-    if (auto E = ParseExpression())
-        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-    return nullptr;
+    auto E = ParseExpression();
+    if (!E)
+        return nullptr;
+
+    if (CurTok != tok_end)
+        return ErrorF("expected 'end' after function definition");
+
+    getNextToken(); // eat 'end'
+
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
 }
 
 // Support extern to declare functions like 'sin' and 'cos' as well as to support
@@ -570,16 +643,17 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 // Will handle this by defining anonymous nullary (zero argument) functions for them
 // toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
+    SourceLocation FnLoc = CurLoc;
     if (auto E = ParseExpression()) {
         // Make anonymous proto
-        auto Proto = llvm::make_unique<PrototypeAST>("__anon_expr", std::vector<std::string>());
+        auto Proto = llvm::make_unique<PrototypeAST>(FnLoc, "main", std::vector<std::string>());
         return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
 }
 
 // If expression parsing
-// ifexpr ::= 'if' expression 'then' expression 'else' expression
+// ifexpr ::= 'if' expression 'then' expression 'else' expression 'end'
 static std::unique_ptr<ExprAST> ParseIfExpr() {
     getNextToken(); // eat the if
 
@@ -601,8 +675,12 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
     getNextToken(); // eat the else
 
     auto Else = ParseExpression();
-    if (!Else) 
+    if (!Else)
         return nullptr;
+
+    if (CurTok != tok_end)
+        return Error("expected 'end' after if expression");
+    getNextToken(); // eat 'end'
 
     return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
 }
@@ -651,12 +729,16 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
     if (!Body)
         return nullptr;
 
+    if (CurTok != tok_end)
+        return Error("expected 'end' after for");
+    getNextToken(); // eat 'end'
+
     return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
 }
 
 // Parse unary expression
-// If we see a unary operator when parsing a primary operator, eat the operator and parse 
+// If we see a unary operator when parsing a primary operator, eat the operator and parse
 // the remaining piece as another unary operator.
 // This lets us handle multiple unary operators (e.g. '!!x')
 // Unary operators aren't ambiguous, so no need for precedence.
@@ -677,7 +759,7 @@ static std::unique_ptr<ExprAST> ParseUnary() {
 }
 
 // varexpr ::= 'var' identifier ('=' expression)?
-//                  (',' identifier ('=' expression)?* 'in' expression
+//                  (',' identifier ('=' expression)?* 'in' expression 'end'
 static std::unique_ptr<ExprAST> ParseVarExpr() {
     getNextToken(); // eat the 'var'.
 
@@ -700,7 +782,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
             Init = ParseExpression();
             if (!Init)
                 return nullptr;
-        } 
+        }
 
         VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
@@ -715,7 +797,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     }
 
     // At this point we have to have 'in'.
-    if (CurTok != tok_in) 
+    if (CurTok != tok_in)
         return Error("expected 'in' keyword after 'var'");
     getNextToken(); // eat 'in'.
 
@@ -723,9 +805,57 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     if (!Body)
         return nullptr;
 
+    if (CurTok != tok_end)
+        return Error("expected 'end' after 'var'");
+    getNextToken(); // eat 'end'
+
     return llvm::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
 }
 
+// ================================================================
+// Debug Info Support
+// ================================================================
+
+// FnScopeMap keeps a map of each function to the scope that it represents.
+// A DISubpgrogram is also a DIScope.
+std::vector<DIScope *> LexicalBlocks;
+std::map<const PrototypeAST *, DIScope *> FnScopeMap;
+static std::unique_ptr<DIBuilder> DBuilder;
+
+DIType *DebugInfo::getDoubleTy() {
+    if (DblTy)
+        return DblTy;
+
+    DblTy = DBuilder->createBasicType("double", 64, 64, dwarf::DW_ATE_float);
+    return DblTy;
+}
+
+// Tells main IRBuilder where we are, but also what scope we are in.
+// Scope is a stack, can either be in the main file scope, or in the function scope etc.
+void DebugInfo::emitLocation(ExprAST *AST) {
+    if (!AST)
+        return Builder.SetCurrentDebugLocation(DebugLoc());
+    DIScope *Scope;
+    if (LexicalBlocks.empty())
+        Scope = TheCU;
+    else
+        Scope = LexicalBlocks.back();
+    Builder.SetCurrentDebugLocation(
+            DebugLoc::get(AST->getLine(), AST->getCol(), Scope));
+}
+
+static DISubroutineType *CreateFunctionType(unsigned NumArgs, DIFile *Unit) {
+    SmallVector<Metadata *, 8> EltTys;
+    DIType *DblTy = KSDbgInfo.getDoubleTy();
+
+    // Add the result type.
+    EltTys.push_back(DblTy);
+
+    for (unsigned i = 0, e = NumArgs; i != e; ++i)
+        EltTys.push_back(DblTy);
+
+    return DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(EltTys));
+}
 
 // ================================================================
 // Code Generation
@@ -735,11 +865,10 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
 // TheModule is an LLVM construct that contains functions and global variables.
 // It owns the memory for all of the IR we generate. (Also why codegen() returns raw Value* rather than unique_ptr(Value)
 // Builder is a helper object that makes it easy to generate LLVM instructions.
-// NamedValues keeps track of which values are defined in the current scope, 
+// NamedValues keeps track of which values are defined in the current scope,
 // and what their LLVM representation is.
 // NamedValues holds the memory location of each mutable variable.
 static std::unique_ptr<Module> TheModule;
-static IRBuilder<> Builder(getGlobalContext());
 static std::map<std::string, AllocaInst*> NamedValues;
 static std::unique_ptr<llvm::legacy::FunctionPassManager> TheFPM;
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
@@ -764,7 +893,7 @@ Function *getFunction(std::string Name) {
 
     // If not, check whether we can codegen the declaration from some existing prototype.
     auto FI = FunctionProtos.find(Name);
-    if (FI != FunctionProtos.end()) 
+    if (FI != FunctionProtos.end())
         return FI->second->codegen();
 
     // If no existing prototype exists, return null.
@@ -774,6 +903,7 @@ Function *getFunction(std::string Name) {
 // Generate code for numeric literals
 // `APFloat` has the capability of holder fp constants of arbitrary precision.
 Value *NumberExprAST::codegen() {
+    KSDbgInfo.emitLocation(this);
     return ConstantFP::get(getGlobalContext(), APFloat(Val));
 }
 
@@ -781,8 +911,11 @@ Value *NumberExprAST::codegen() {
 Value *VariableExprAST::codegen() {
     // Look this variable up in the function
     Value *V = NamedValues[Name];
-    if (!V) 
+    if (!V)
         ErrorV("Unknown variable name");
+
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
 
     // Load the value
     return Builder.CreateLoad(V, Name.c_str());
@@ -794,7 +927,9 @@ Value *VariableExprAST::codegen() {
 // fcmp always returns an 'i1' value (a one bit integer).
 // We want 0.0 or 1.0 for this, so we use a uitofp instruction.
 Value *BinaryExprAST::codegen() {
-    
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
     // Special case '=' because we don't want to emit the LHS as an expression
     if (Op == '=') {
         // Assignment requires the LHS to be an identifier.
@@ -819,7 +954,7 @@ Value *BinaryExprAST::codegen() {
         Builder.CreateStore(Val, Variable);
         return Val;
     }
-    
+
     Value *L = LHS->codegen();
     Value *R = RHS->codegen();
 
@@ -841,7 +976,7 @@ Value *BinaryExprAST::codegen() {
         break;
     }
 
-    // If it wasn't a builtin binary operator, it must be a user defined one. 
+    // If it wasn't a builtin binary operator, it must be a user defined one.
     // Loop up the operator in the symbol table.
     // Emit a call to it.
     Function *F = getFunction(std::string("binary") + Op);
@@ -858,6 +993,9 @@ Value *BinaryExprAST::codegen() {
 // Note that LLVM uses the native C calling conventions by default,
 // allowing these calls to also call into standard lib functions like `sin` and `cos`.
 Value *CallExprAST::codegen() {
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
     // Look up the name in the global module table
     Function *CalleeF = getFunction(Callee);
     if (!CalleeF)
@@ -879,12 +1017,19 @@ Value *CallExprAST::codegen() {
 // Generate code for function declarations (prototypes)
 // All function types are Doubles for now
 Function *PrototypeAST::codegen() {
+
+    // Return type. Special case "main" function to return i32 0
+    //TODO: Remove once proper type support is added.
+    Type *ReturnType = Type::getDoubleTy(getGlobalContext());
+    if (Name == "main")
+      ReturnType = Type::getInt32Ty(getGlobalContext());
+
     // Make the function type: double(double, double) etc.
-    std::vector<Type*> Doubles(Args.size(), 
+    std::vector<Type*> Doubles(Args.size(),
             Type::getDoubleTy(getGlobalContext()));
-    
+
     // false specifies this is not a vargs function
-    FunctionType *FT = FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
+    FunctionType *FT = FunctionType::get(ReturnType, Doubles, false);
     // ExternalLinkage means function may be defined outside the current module
     // or that it is callable by functions outside the module.
     Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
@@ -911,7 +1056,7 @@ Function *FunctionAST::codegen() {
     // If this is an operator, install it in the BinopPrecedence map.
     if (P.isBinaryOp())
         BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
-    
+
     // Want to make sure that the function doesn't already have a body before we generate one.
     if (!TheFunction->empty())
         return (Function*)ErrorV("Function cannot be redefined.");
@@ -920,13 +1065,44 @@ Function *FunctionAST::codegen() {
     BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", TheFunction);
     Builder.SetInsertPoint(BB);
 
+    // Create a subprogram DIE for this function.
+    DIFile *Unit = DBuilder->createFile(KSDbgInfo.TheCU->getFilename(),
+            KSDbgInfo.TheCU->getDirectory());
+
+    DIScope *FContext = Unit;
+    unsigned LineNo = P.getLine();
+    unsigned ScopeLine = LineNo;
+    // DISubprogram contains a reference to all of our metadata for the function.
+    DISubprogram *SP = DBuilder->createFunction(
+            FContext, P.getName(), StringRef(), Unit, LineNo,
+            CreateFunctionType(TheFunction->arg_size(), Unit), false /* internal linkage */,
+            true /* definition */, ScopeLine, DINode::FlagPrototyped, false);
+    TheFunction->setSubprogram(SP);
+
+    // Push the current scope
+    KSDbgInfo.LexicalBlocks.push_back(SP);
+
+    // Unset the location for the prologue emission (leading instructinos with no
+    // location in a function are considered part of the prologue and the debugger
+    // will run past them when breaking on a function.
+    KSDbgInfo.emitLocation(nullptr);
+
     // Record the function arguments in the NamedValues map.
-    // Add the function arguments to the NamedValues map, so they are accessible to the 
+    // Add the function arguments to the NamedValues map, so they are accessible to the
     // `VariableExprAST` nodes
     NamedValues.clear();
+    unsigned ArgIdx = 0;
     for (auto &Arg : TheFunction->args()) {
         // Create an alloca for this variable.
         AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+
+        // Create a debug descriptor for the variable.
+        DILocalVariable *D = DBuilder->createParameterVariable(
+                SP, Arg.getName(), ++ArgIdx, Unit, LineNo, KSDbgInfo.getDoubleTy(), true);
+
+        DBuilder->insertDeclare(Alloca, D, DBuilder->createExpression(),
+                DebugLoc::get(LineNo, 0, SP),
+                Builder.GetInsertBlock());
 
         // Store the initial value into the alloca.
         Builder.CreateStore(&Arg, Alloca);
@@ -935,33 +1111,50 @@ Function *FunctionAST::codegen() {
         NamedValues[Arg.getName()] = Alloca;
     }
 
+    KSDbgInfo.emitLocation(Body.get());
+
     // If no error, emit the ret instruction, which completes the function.
     if (Value *RetVal = Body->codegen()) {
+
+        // Special case "main"
+        // TODO: Remove once proper type support is added
+        if (P.getName() == "main") {
+          RetVal = ConstantInt::get(getGlobalContext(), APInt(32,0));
+        }
+
         // Finish off the function.
         Builder.CreateRet(RetVal);
 
+        // Pop off the lexical block for the function.
+        KSDbgInfo.LexicalBlocks.pop_back();
+
         // Validate the generated code, checking for consistency. Function is provided by LLVM.
         verifyFunction(*TheFunction);
-
-#ifdef OPTIMIZATIONS
-        // Optimize the function.
-        TheFPM->run(*TheFunction);
-#endif
 
         return TheFunction;
     }
 
     // Error reading body, remove function.
     TheFunction->eraseFromParent();
+
+    if (P.isBinaryOp())
+        BinopPrecedence.erase(Proto->getOperatorName());
+
+    // Pop off the lexical block for the function since we added it unconditionally
+    KSDbgInfo.LexicalBlocks.pop_back();
+
     return nullptr;
 }
 
 // Generate code for if/then/else expressions.
-// We get the condition, and convert to a boolean value, then get the function we are 
+// We get the condition, and convert to a boolean value, then get the function we are
 // currently in, by getting the current blocks parent.
 // TheFunction is passed into the `ThenBB` block so it's automatically inserted into the function.
 // Then we create the conditional branch that chooses between the blocks.
 Value *IfExprAST::codegen() {
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
     Value *CondV = Cond->codegen();
     if (!CondV)
         return nullptr;
@@ -972,7 +1165,7 @@ Value *IfExprAST::codegen() {
 
     Function *TheFunction = Builder.GetInsertBlock()->getParent();
 
-    // Create blocks for the then and else cases. Insert the 'then' block at the 
+    // Create blocks for the then and else cases. Insert the 'then' block at the
     // end of the function
     BasicBlock *ThenBB = BasicBlock::Create(getGlobalContext(), "then", TheFunction);
     BasicBlock *ElseBB = BasicBlock::Create(getGlobalContext(), "else");
@@ -1018,7 +1211,7 @@ Value *IfExprAST::codegen() {
 }
 
 // Generate code for 'for/in' expressions
-// With the introduction of for/in expressions, our symbol table can now contain function 
+// With the introduction of for/in expressions, our symbol table can now contain function
 // arguments or loop variables.
 // It's possible that a var with the same name exists in outer scope,
 // we choose to shadow the existing value in this case.
@@ -1043,9 +1236,12 @@ Value *ForExprAST::codegen() {
     // Create an alloc for the variable in the entry block.
     AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
     // Emit the start code first, without 'variable in scope.
     Value *StartVal = Start->codegen();
-    if (!StartVal) 
+    if (!StartVal)
         return nullptr;
 
     // Store the value into the alloca
@@ -1092,7 +1288,7 @@ Value *ForExprAST::codegen() {
     Builder.CreateStore(NextVar, Alloca);
 
     // Convert condition to a bool by comparing equal to 0.0
-    EndCond = Builder.CreateFCmpONE(EndCond, 
+    EndCond = Builder.CreateFCmpONE(EndCond,
             ConstantFP::get(getGlobalContext(), APFloat(0.0)), "loopcond");
 
     // Create the "after loop" block and insert it
@@ -1125,6 +1321,10 @@ Value *UnaryExprAST::codegen() {
     if (!F)
         return ErrorV("Unknown unary operator");
 
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
+    // Return function call
     return Builder.CreateCall(F, OperandV, "unop");
 }
 
@@ -1141,7 +1341,7 @@ Value *VarExprAST::codegen() {
 
         // Emit the initializer before adding the variable to scope, this prevents
         // the initializer from referencing the variable itself, and permits stuff like this:
-        // var a = 1 in 
+        // var a = 1 in
         //   var a = a in ... # refers to outer 'a'
         Value *InitVal;
         if (Init) {
@@ -1163,6 +1363,9 @@ Value *VarExprAST::codegen() {
         NamedValues[VarName] = Alloca;
     }
 
+    // Emit debug location
+    KSDbgInfo.emitLocation(this);
+
     // Codegen the body, now that all vars are in scope
     Value *BodyVal = Body->codegen();
     if (!BodyVal)
@@ -1182,30 +1385,11 @@ Value *VarExprAST::codegen() {
 // Optimizer
 // ================================================================
 
-// Initializes the global module `TheModule` and attaches a function pass manager
-// Pass manager currently has four optimization passes.
-void InitializeModuleAndPassManager(void) {
+// Initializes the global module `TheModule`
+void InitializeModule(void) {
     // Open a new module.
     TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
     TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
-
-#ifdef OPTIMIZATIONS
-    // Create a new pass manager and attach to it
-    TheFPM = llvm::make_unique<llvm::legacy::FunctionPassManager>(TheModule.get());
-
-    // Promote allocas to registers
-    TheFPM->add(createPromoteMemoryToRegisterPass());
-    // Do simple "peephole" optimizations and bit-twiddling optmizations.
-    TheFPM->add(createInstructionCombiningPass());
-    // Reassociate expressions
-    TheFPM->add(createReassociatePass());
-    // Eliminate common subexpressions
-    TheFPM->add(createGVNPass());
-    // Simplify the control flow graph (deleting unreachable blocks, etc).
-    TheFPM->add(createCFGSimplificationPass());
-
-    TheFPM->doInitialization();
-#endif
 }
 
 
@@ -1215,11 +1399,8 @@ void InitializeModuleAndPassManager(void) {
 
 static void HandleDefinition() {
     if (auto FnAST = ParseDefinition()) {
-        if (auto *FnIR = FnAST->codegen()) {
-            fprintf(stderr, "Read function definition:");
-            FnIR->dump();
-            TheJIT->addModule(std::move(TheModule));
-            InitializeModuleAndPassManager();
+        if (!FnAST->codegen()) {
+            fprintf(stderr, "Error reading function definition:");
         }
     } else {
         // Skip token for error recovery.
@@ -1229,11 +1410,10 @@ static void HandleDefinition() {
 
 static void HandleExtern() {
     if (auto ProtoAST = ParseExtern()) {
-        if (auto *FnIR = ProtoAST->codegen()) {
-            fprintf(stderr, "Parsed an extern\n");
-            FnIR->dump();
+        if (!ProtoAST->codegen())
+            fprintf(stderr, "Error reading extern");
+        else
             FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
-        }
     } else {
         // Skip token for error recovery.
         getNextToken();
@@ -1243,25 +1423,8 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
     // Evaluate a top-level expression into an anonymous function.
     if (auto FnAST = ParseTopLevelExpr()) {
-        if (FnAST->codegen()) {
-            
-            // JIT the module containing the anonymous expression, keeping a handle so
-            // we can free it later
-            auto H = TheJIT->addModule(std::move(TheModule));
-            InitializeModuleAndPassManager();
-
-            // Search the JIT for the __anon_expr symbol.
-            auto ExprSymbol = TheJIT->findSymbol("__anon_expr");
-            assert(ExprSymbol && "Function not found");
-
-            // Get the symbol's address and cast it to the right type (takes no
-            // arguments, returns a double), so we can call it as a native function
-            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
-            fprintf(stderr, "Evaluated to %f\n", FP());
-        
-            // Delete the anonymous expression module from the JIT
-            TheJIT->removeModule(H);
-        }
+        if (!FnAST->codegen())
+            fprintf(stderr, "Error generating code for top level expression");
     } else {
         // Skip token for error recovery.
         getNextToken();
@@ -1269,14 +1432,13 @@ static void HandleTopLevelExpression() {
 }
 
 // Driver invokes all of the parsing pieces with a top-level dispatch loop.
-// Ignore top level semicolons. 
+// Ignore top level semicolons.
 // - Reason for this is so the parser knows whether that is the end of what you will type
 // at the command line.
 // - E.g. allows you to type 4+5; and the parser will know you are done.
 // top ::= definition | external | expression | ';'
 static void MainLoop() {
     while (1) {
-        fprintf(stderr, "yorkie> ");
         switch(CurTok) {
         case tok_eof:
             return;
@@ -1320,7 +1482,7 @@ int main() {
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
-    
+
     // Install standard binary operators
     // 1 is lowest precendence
     BinopPrecedence['='] = 2;
@@ -1330,21 +1492,39 @@ int main() {
     BinopPrecedence['*'] = 40; // Highest
 
     // Prime the first token.
-    fprintf(stderr, "yorkie> ");
     getNextToken();
 
     // Initialize the JIT
     TheJIT = llvm::make_unique<KaleidoscopeJIT>();
 
-    // Setup the module and the optimizer
-    InitializeModuleAndPassManager();
+    // Setup the module
+    InitializeModule();
+
+    // Add the current debug info version into the module
+    TheModule->addModuleFlag(Module::Warning, "Debug Info Version",
+            DEBUG_METADATA_VERSION);
+
+    // Darwin only supports dwarf2.
+    if (Triple(sys::getProcessTriple()).isOSDarwin())
+        TheModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+
+    // Construct the DIBuilder, we do this here because we need the module.
+    DBuilder = llvm::make_unique<DIBuilder>(*TheModule);
+
+    // Create the compile unit for the module.
+    // Currently down as fib.yk as a filename since we're redirecting stdin
+    // but we'd like actual source locations.
+    KSDbgInfo.TheCU = DBuilder->createCompileUnit(dwarf::DW_LANG_C, "fib.yk", ".",
+            "Yorkie Compiler", 0, "", 0);
 
     // Run the main "interpreter loop" now.
     MainLoop();
+
+    // Finalize the debug info.
+    DBuilder->finalize();
 
     // Print out all of the generated code
     TheModule->dump();
 
     return 0;
 }
-
