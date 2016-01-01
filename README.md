@@ -64,17 +64,10 @@ def foo()
 - MIT
 
 ### Progress / TODO
-- [X] Chapter 1: Introduction and the Lexer
-- [X] Chapter 2: Parser and AST
-- [X] Chapter 3: Code generation to LLVM IR 
-- [X] Chapter 4: Adding JIT and optimizer support 
-- [X] Chapter 5: Extending the language: control flow 
-- [X] Chapter 6: Extending the language: user-defined operators
-- [X] Chapter 7: Extending the language: Mutable Variables.
-- [X] Chapter 8: Adding debug information
 - [ ] main return type is incorrectly flagged in DWARF description
 - [ ] Enable loading external modules.
 - [ ] Make externs work again
+- [ ] Investigate the built in cl:: namespace (command line parsing).
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions
 - [ ] If statements should have an `if/end` variant (without `else`).
