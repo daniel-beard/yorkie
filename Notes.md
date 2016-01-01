@@ -20,3 +20,45 @@
 #### Additional language features required:
 - The ability to mutate variables with the ‘=’ operator.
 - The ability to define new variables.
+
+### Compiling C down to LLVM IR
+`clang -S -emit-llvm foo.c`
+
+### Other compiling notes
+- Compile several files down to .ll format
+
+```
+clang -S -emit-llvm foo.c -o foo.ll
+clang -S -emit-llvm bar.c -o bar.ll
+```
+
+Compile down to bitcode:
+
+```
+llvm-as foo.ll -o foo.bc
+llvm-as bar.ll -o bar.bc
+```
+
+Link bitcode files together:
+
+```
+llvm-link foo.bc bar.bc -o output.bc
+```
+
+Run bitcode files:
+
+```
+lli output.bc
+```
+
+Statically compile bitcode files:
+
+```
+llc output.bc 
+```
+
+llc can even generate cpp code from bitcode:
+
+```
+llc -march=cpp output.bc
+```
