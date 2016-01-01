@@ -74,6 +74,7 @@ def foo()
 - [X] Chapter 8: Adding debug information
 - [ ] main needs to be special cased to return i32 0
 - [ ] Make externs work again
+- [ ] Fix CI builds
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions
 - [ ] If statements should have an `if/end` variant (without `else`).

@@ -9,7 +9,7 @@ script:
 - make build
 after_success:
 - ls
-- echo "4+5;" | ./toy
+#- echo "4+5;" | ./toy
 sudo: true
 os: linux
 dist: trusty

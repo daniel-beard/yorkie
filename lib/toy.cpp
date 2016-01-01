@@ -1017,12 +1017,19 @@ Value *CallExprAST::codegen() {
 // Generate code for function declarations (prototypes)
 // All function types are Doubles for now
 Function *PrototypeAST::codegen() {
+
+    // Return type. Special case "main" function to return i32 0
+    //TODO: Remove once proper type support is added.
+    Type *ReturnType = Type::getDoubleTy(getGlobalContext());
+    if (Name == "main")
+      ReturnType = Type::getInt32Ty(getGlobalContext());
+
     // Make the function type: double(double, double) etc.
     std::vector<Type*> Doubles(Args.size(),
             Type::getDoubleTy(getGlobalContext()));
 
     // false specifies this is not a vargs function
-    FunctionType *FT = FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
+    FunctionType *FT = FunctionType::get(ReturnType, Doubles, false);
     // ExternalLinkage means function may be defined outside the current module
     // or that it is callable by functions outside the module.
     Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
@@ -1108,6 +1115,13 @@ Function *FunctionAST::codegen() {
 
     // If no error, emit the ret instruction, which completes the function.
     if (Value *RetVal = Body->codegen()) {
+
+        // Special case "main"
+        // TODO: Remove once proper type support is added
+        if (P.getName() == "main") {
+          RetVal = ConstantInt::get(getGlobalContext(), APInt(32,0));
+        }
+
         // Finish off the function.
         Builder.CreateRet(RetVal);
 

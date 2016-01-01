@@ -56,3 +56,9 @@ Statically compile bitcode files:
 ```
 llc output.bc 
 ```
+
+llc can even generate cpp code from bitcode:
+
+```
+llc -march=cpp output.bc
+```
