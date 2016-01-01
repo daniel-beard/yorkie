@@ -64,8 +64,10 @@ def foo()
 - MIT
 
 ### Progress / TODO
-- [ ] main return type is incorrectly flagged in DWARF description
+- [ ] Add changelog 
 - [ ] Enable loading external modules.
+- [ ] Fix CI
+- [ ] main return type is incorrectly flagged in DWARF description
 - [ ] Make externs work again
 - [ ] Investigate the built in cl:: namespace (command line parsing).
 - [ ] Function definitions should have commas between parameters
