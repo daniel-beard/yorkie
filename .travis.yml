@@ -5,6 +5,7 @@ before_install:
 - if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
+- clang -version
 script:
 - make build
 after_success:
