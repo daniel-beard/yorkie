@@ -72,6 +72,7 @@ def foo()
 - [X] Chapter 6: Extending the language: user-defined operators
 - [X] Chapter 7: Extending the language: Mutable Variables.
 - [X] Chapter 8: Adding debug information
+- [ ] main needs to be special cased to return i32 0
 - [ ] Make externs work again
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions

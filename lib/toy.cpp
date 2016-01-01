@@ -76,7 +76,7 @@ class ProtoTypeAST;
 class ExprAST;
 }
 
-struct DebugInfo { 
+struct DebugInfo {
     DICompileUnit *TheCU;
     DIType *DblTy;
     std::vector<DIScope *> LexicalBlocks;
@@ -167,7 +167,7 @@ static int gettok() {
 
     // If the input doesn't match one of the above cases, it is either an operator
     // character like '+' or the end of file. Handle these below.
-    
+
     // Check for end of file. Don't eat the EOF
     if (LastChar == EOF) {
         return tok_eof;
@@ -242,7 +242,7 @@ public:
     BinaryExprAST(SourceLocation Loc,
             char op,
             std::unique_ptr<ExprAST> LHS,
-            std::unique_ptr<ExprAST> RHS) : 
+            std::unique_ptr<ExprAST> RHS) :
          ExprAST(Loc), Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
     Value *codegen() override;
 };
@@ -271,9 +271,9 @@ class PrototypeAST {
     int Line;
 
 public:
-    PrototypeAST(SourceLocation Loc, const std::string &name, 
-            std::vector<std::string> Args, bool IsOperator = false, unsigned Prec = 0) 
-        : Name(name), Args(std::move(Args)), IsOperator(IsOperator), 
+    PrototypeAST(SourceLocation Loc, const std::string &name,
+            std::vector<std::string> Args, bool IsOperator = false, unsigned Prec = 0)
+        : Name(name), Args(std::move(Args)), IsOperator(IsOperator),
         Precedence(Prec), Line(Loc.Line) {};
     Function *codegen();
     const std::string &getName() const { return Name; }
@@ -322,7 +322,7 @@ public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
             std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
             std::unique_ptr<ExprAST> Body)
-        : VarName(VarName), Start(std::move(Start)), End(std::move(End)), 
+        : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
         Step(std::move(Step)), Body(std::move(Body)) {}
     Value *codegen();
 };
@@ -401,7 +401,7 @@ static std::unique_ptr<ExprAST> ParseNumberExpr() {
 }
 
 // Parenthesis Operator
-// Demonstrates error routines, expects that the current token is `(`, but there may not be 
+// Demonstrates error routines, expects that the current token is `(`, but there may not be
 // a corresponding `)` token.
 // We return null on an error.
 // We recursively call ParseExpression, this is powerful because we can handle recursive grammars.
@@ -444,7 +444,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
                 return nullptr;
             }
 
-            if (CurTok == ')') 
+            if (CurTok == ')')
                 break;
 
             if (CurTok != ',')
@@ -502,9 +502,9 @@ static int GetTokPrecedence() {
     return TokPrec;
 }
 
-// Parse sequences of pairs. Takes a precendence and a pointer to an expression for the 
+// Parse sequences of pairs. Takes a precendence and a pointer to an expression for the
 // part that has been parsed so far.
-// The precendence passed into `ParseBinOpRHS` indicates the minimal operator precendence that 
+// The precendence passed into `ParseBinOpRHS` indicates the minimal operator precendence that
 // the function is allowed to eat.
 // binoprhs
 //  ::= ('+' primary)*
@@ -515,7 +515,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
 
         // If this is a binop that binds at least as tightly as the current binop,
         // consume it, otherwise we are done.
-        if (TokPrec < ExprPrec) 
+        if (TokPrec < ExprPrec)
             return LHS;
 
         // Okay, we know this is a binop.
@@ -620,7 +620,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
     if (!Proto) return nullptr;
 
     auto E = ParseExpression();
-    if (!E) 
+    if (!E)
         return nullptr;
 
     if (CurTok != tok_end)
@@ -675,7 +675,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
     getNextToken(); // eat the else
 
     auto Else = ParseExpression();
-    if (!Else) 
+    if (!Else)
         return nullptr;
 
     if (CurTok != tok_end)
@@ -738,7 +738,7 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 }
 
 // Parse unary expression
-// If we see a unary operator when parsing a primary operator, eat the operator and parse 
+// If we see a unary operator when parsing a primary operator, eat the operator and parse
 // the remaining piece as another unary operator.
 // This lets us handle multiple unary operators (e.g. '!!x')
 // Unary operators aren't ambiguous, so no need for precedence.
@@ -782,7 +782,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
             Init = ParseExpression();
             if (!Init)
                 return nullptr;
-        } 
+        }
 
         VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
@@ -797,7 +797,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     }
 
     // At this point we have to have 'in'.
-    if (CurTok != tok_in) 
+    if (CurTok != tok_in)
         return Error("expected 'in' keyword after 'var'");
     getNextToken(); // eat 'in'.
 
@@ -838,7 +838,7 @@ void DebugInfo::emitLocation(ExprAST *AST) {
     DIScope *Scope;
     if (LexicalBlocks.empty())
         Scope = TheCU;
-    else 
+    else
         Scope = LexicalBlocks.back();
     Builder.SetCurrentDebugLocation(
             DebugLoc::get(AST->getLine(), AST->getCol(), Scope));
@@ -851,7 +851,7 @@ static DISubroutineType *CreateFunctionType(unsigned NumArgs, DIFile *Unit) {
     // Add the result type.
     EltTys.push_back(DblTy);
 
-    for (unsigned i = 0, e = NumArgs; i != e; ++i) 
+    for (unsigned i = 0, e = NumArgs; i != e; ++i)
         EltTys.push_back(DblTy);
 
     return DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(EltTys));
@@ -865,7 +865,7 @@ static DISubroutineType *CreateFunctionType(unsigned NumArgs, DIFile *Unit) {
 // TheModule is an LLVM construct that contains functions and global variables.
 // It owns the memory for all of the IR we generate. (Also why codegen() returns raw Value* rather than unique_ptr(Value)
 // Builder is a helper object that makes it easy to generate LLVM instructions.
-// NamedValues keeps track of which values are defined in the current scope, 
+// NamedValues keeps track of which values are defined in the current scope,
 // and what their LLVM representation is.
 // NamedValues holds the memory location of each mutable variable.
 static std::unique_ptr<Module> TheModule;
@@ -893,7 +893,7 @@ Function *getFunction(std::string Name) {
 
     // If not, check whether we can codegen the declaration from some existing prototype.
     auto FI = FunctionProtos.find(Name);
-    if (FI != FunctionProtos.end()) 
+    if (FI != FunctionProtos.end())
         return FI->second->codegen();
 
     // If no existing prototype exists, return null.
@@ -911,7 +911,7 @@ Value *NumberExprAST::codegen() {
 Value *VariableExprAST::codegen() {
     // Look this variable up in the function
     Value *V = NamedValues[Name];
-    if (!V) 
+    if (!V)
         ErrorV("Unknown variable name");
 
     // Emit debug location
@@ -954,7 +954,7 @@ Value *BinaryExprAST::codegen() {
         Builder.CreateStore(Val, Variable);
         return Val;
     }
-    
+
     Value *L = LHS->codegen();
     Value *R = RHS->codegen();
 
@@ -976,7 +976,7 @@ Value *BinaryExprAST::codegen() {
         break;
     }
 
-    // If it wasn't a builtin binary operator, it must be a user defined one. 
+    // If it wasn't a builtin binary operator, it must be a user defined one.
     // Loop up the operator in the symbol table.
     // Emit a call to it.
     Function *F = getFunction(std::string("binary") + Op);
@@ -1018,9 +1018,9 @@ Value *CallExprAST::codegen() {
 // All function types are Doubles for now
 Function *PrototypeAST::codegen() {
     // Make the function type: double(double, double) etc.
-    std::vector<Type*> Doubles(Args.size(), 
+    std::vector<Type*> Doubles(Args.size(),
             Type::getDoubleTy(getGlobalContext()));
-    
+
     // false specifies this is not a vargs function
     FunctionType *FT = FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
     // ExternalLinkage means function may be defined outside the current module
@@ -1049,7 +1049,7 @@ Function *FunctionAST::codegen() {
     // If this is an operator, install it in the BinopPrecedence map.
     if (P.isBinaryOp())
         BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
-    
+
     // Want to make sure that the function doesn't already have a body before we generate one.
     if (!TheFunction->empty())
         return (Function*)ErrorV("Function cannot be redefined.");
@@ -1075,13 +1075,13 @@ Function *FunctionAST::codegen() {
     // Push the current scope
     KSDbgInfo.LexicalBlocks.push_back(SP);
 
-    // Unset the location for the prologue emission (leading instructinos with no 
+    // Unset the location for the prologue emission (leading instructinos with no
     // location in a function are considered part of the prologue and the debugger
     // will run past them when breaking on a function.
     KSDbgInfo.emitLocation(nullptr);
 
     // Record the function arguments in the NamedValues map.
-    // Add the function arguments to the NamedValues map, so they are accessible to the 
+    // Add the function arguments to the NamedValues map, so they are accessible to the
     // `VariableExprAST` nodes
     NamedValues.clear();
     unsigned ArgIdx = 0;
@@ -1133,7 +1133,7 @@ Function *FunctionAST::codegen() {
 }
 
 // Generate code for if/then/else expressions.
-// We get the condition, and convert to a boolean value, then get the function we are 
+// We get the condition, and convert to a boolean value, then get the function we are
 // currently in, by getting the current blocks parent.
 // TheFunction is passed into the `ThenBB` block so it's automatically inserted into the function.
 // Then we create the conditional branch that chooses between the blocks.
@@ -1151,7 +1151,7 @@ Value *IfExprAST::codegen() {
 
     Function *TheFunction = Builder.GetInsertBlock()->getParent();
 
-    // Create blocks for the then and else cases. Insert the 'then' block at the 
+    // Create blocks for the then and else cases. Insert the 'then' block at the
     // end of the function
     BasicBlock *ThenBB = BasicBlock::Create(getGlobalContext(), "then", TheFunction);
     BasicBlock *ElseBB = BasicBlock::Create(getGlobalContext(), "else");
@@ -1197,7 +1197,7 @@ Value *IfExprAST::codegen() {
 }
 
 // Generate code for 'for/in' expressions
-// With the introduction of for/in expressions, our symbol table can now contain function 
+// With the introduction of for/in expressions, our symbol table can now contain function
 // arguments or loop variables.
 // It's possible that a var with the same name exists in outer scope,
 // we choose to shadow the existing value in this case.
@@ -1227,7 +1227,7 @@ Value *ForExprAST::codegen() {
 
     // Emit the start code first, without 'variable in scope.
     Value *StartVal = Start->codegen();
-    if (!StartVal) 
+    if (!StartVal)
         return nullptr;
 
     // Store the value into the alloca
@@ -1274,7 +1274,7 @@ Value *ForExprAST::codegen() {
     Builder.CreateStore(NextVar, Alloca);
 
     // Convert condition to a bool by comparing equal to 0.0
-    EndCond = Builder.CreateFCmpONE(EndCond, 
+    EndCond = Builder.CreateFCmpONE(EndCond,
             ConstantFP::get(getGlobalContext(), APFloat(0.0)), "loopcond");
 
     // Create the "after loop" block and insert it
@@ -1327,7 +1327,7 @@ Value *VarExprAST::codegen() {
 
         // Emit the initializer before adding the variable to scope, this prevents
         // the initializer from referencing the variable itself, and permits stuff like this:
-        // var a = 1 in 
+        // var a = 1 in
         //   var a = a in ... # refers to outer 'a'
         Value *InitVal;
         if (Init) {
@@ -1371,7 +1371,7 @@ Value *VarExprAST::codegen() {
 // Optimizer
 // ================================================================
 
-// Initializes the global module `TheModule` 
+// Initializes the global module `TheModule`
 void InitializeModule(void) {
     // Open a new module.
     TheModule = llvm::make_unique<Module>("dbeard jit", getGlobalContext());
@@ -1396,9 +1396,9 @@ static void HandleDefinition() {
 
 static void HandleExtern() {
     if (auto ProtoAST = ParseExtern()) {
-        if (!ProtoAST->codegen()) 
+        if (!ProtoAST->codegen())
             fprintf(stderr, "Error reading extern");
-        else 
+        else
             FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     } else {
         // Skip token for error recovery.
@@ -1418,7 +1418,7 @@ static void HandleTopLevelExpression() {
 }
 
 // Driver invokes all of the parsing pieces with a top-level dispatch loop.
-// Ignore top level semicolons. 
+// Ignore top level semicolons.
 // - Reason for this is so the parser knows whether that is the end of what you will type
 // at the command line.
 // - E.g. allows you to type 4+5; and the parser will know you are done.
@@ -1468,7 +1468,7 @@ int main() {
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
-    
+
     // Install standard binary operators
     // 1 is lowest precendence
     BinopPrecedence['='] = 2;
@@ -1483,7 +1483,7 @@ int main() {
     // Initialize the JIT
     TheJIT = llvm::make_unique<KaleidoscopeJIT>();
 
-    // Setup the module 
+    // Setup the module
     InitializeModule();
 
     // Add the current debug info version into the module
@@ -1514,4 +1514,3 @@ int main() {
 
     return 0;
 }
-
