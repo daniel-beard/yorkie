@@ -8,8 +8,11 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Linker/Linker.h"
 #include <cctype>
 #include <cstdio>
 #include <map>
@@ -1475,6 +1478,24 @@ extern "C" double printd(double X) {
 }
 
 // ================================================================
+// Module loading code.
+// ================================================================
+static std::unique_ptr<Module> ParseInputIR(std::string InputFile) {
+    SMDiagnostic Err;
+    auto M = parseIRFile(InputFile, Err, getGlobalContext());
+    if (!M) {
+        Error("Problem parsing input IR");
+        return nullptr;
+    }
+
+    char ModID[256];
+    sprintf(ModID, "IR:%s", InputFile.c_str());
+    M->setModuleIdentifier(ModID);
+
+    return M;
+}
+
+// ================================================================
 // Main Driver code.
 // ================================================================
 
@@ -1499,6 +1520,13 @@ int main() {
 
     // Setup the module
     InitializeModule();
+
+    // Link in the stdlib
+    auto M = ParseInputIR("lib/stdlib.ll");
+    bool LinkErr = llvm::Linker::linkModules(*TheModule, std::move(M));
+    if (LinkErr) {
+        fprintf(stderr, "Error linking modules");
+    }
 
     // Add the current debug info version into the module
     TheModule->addModuleFlag(Module::Warning, "Debug Info Version",

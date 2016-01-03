@@ -11,7 +11,7 @@
 # Control Flow - if/then/else
 if x < 3 then
     1
-else 
+else
     2
 end
 
@@ -21,7 +21,7 @@ sin(10)
 
 # Control Flow - for loops
 # (initial value), (end condition), (optional step value)
-for i = 1, i < n, 1.0 in 
+for i = 1, i < n, 1.0 in
     putchard(i)
 end
 
@@ -50,7 +50,7 @@ fib(40)
 
 # Mutable variables
 def foo()
-    var x = 10 in 
+    var x = 10 in
         x = 11
     end
 ```
@@ -64,18 +64,16 @@ def foo()
 - MIT
 
 ### Progress / TODO
-- [ ] Add changelog 
-- [ ] Enable loading external modules.
-- [ ] Fix CI
-- [ ] main return type is incorrectly flagged in DWARF description
-- [ ] Make externs work again
+- [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
 - [ ] Investigate the built in cl:: namespace (command line parsing).
+- [ ] Create a native stdlib version with some operators.
+- [ ] main return type is incorrectly flagged in DWARF description
 - [ ] Function definitions should have commas between parameters
 - [ ] If statements should support multiple expressions
 - [ ] If statements should have an `if/end` variant (without `else`).
 - [ ] If statements should have an `elseif` variant
 - [ ] Add extra dump methods to the rest of the AST declarations
-- [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
+- [ ] Fix CI
 - [ ] Add import statements
 - [ ] Allow compiler to build files (not just from stdin).
 - [ ] Global variables
