@@ -1488,10 +1488,7 @@ static std::unique_ptr<Module> ParseInputIR(std::string InputFile) {
         return nullptr;
     }
 
-    char ModID[256];
-    sprintf(ModID, "IR:%s", InputFile.c_str());
-    M->setModuleIdentifier(ModID);
-
+    M->setModuleIdentifier("IR:" + InputFile);
     return M;
 }
 
