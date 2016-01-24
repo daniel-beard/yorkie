@@ -28,19 +28,11 @@
 using namespace llvm;
 using namespace llvm::orc;
 
-static std::string IdentifierStr;   // Filled in if tok_identifier
-static double NumVal;               // Filled in if tok_number
+// Lexer
+static Lexer::Lexer lexer = Lexer::Lexer();
 
 // IR Builder.
 static IRBuilder<> Builder(getGlobalContext());
-
-// Source Location Information
-struct SourceLocation {
-    int Line;
-    int Col;
-};
-static SourceLocation CurLoc;
-static SourceLocation LexLoc = {1, 0};
 
 // Forward declarations for KSDbgInfo
 namespace {
@@ -57,100 +49,6 @@ struct DebugInfo {
     DIType *getDoubleTy();
 } KSDbgInfo;
 
-static int advance() {
-    int LastChar = getchar();
-
-    if (LastChar == '\n' || LastChar == '\r') {
-        LexLoc.Line++;
-        LexLoc.Col = 0;
-    } else {
-        LexLoc.Col++;
-    }
-    return LastChar;
-}
-
-/// gettok - Return the next token from standard input.
-static int gettok() {
-    static int LastChar = ' ';
-
-    // Skip any whitespace
-    while (isspace(LastChar)) {
-        LastChar = advance();
-    }
-
-    // Recognize identifiers and specific keywords like 'def'
-    if (isalpha(LastChar)) { // identifier: [a-zA-Z][a-zA-Z0-9]*
-        IdentifierStr = LastChar;
-        while (isalnum((LastChar = advance()))) {
-            IdentifierStr += LastChar;
-        }
-
-        if (IdentifierStr == "def")
-            return Lexer::tok_def;
-        if (IdentifierStr == "extern")
-            return Lexer::tok_extern;
-        if (IdentifierStr == "if")
-            return Lexer::tok_if;
-        if (IdentifierStr == "then")
-            return Lexer::tok_then;
-        if (IdentifierStr == "else")
-            return Lexer::tok_else;
-        if (IdentifierStr == "for")
-            return Lexer::tok_for;
-        if (IdentifierStr == "in")
-            return Lexer::tok_in;
-        if (IdentifierStr == "binary")
-            return Lexer::tok_binary;
-        if (IdentifierStr == "unary")
-            return Lexer::tok_unary;
-        if (IdentifierStr == "var")
-            return Lexer::tok_var;
-        if (IdentifierStr == "end")
-            return Lexer::tok_end;
-
-        return Lexer::tok_identifier;
-    }
-
-    // Handle Numeric Values
-    // Naive, won't handle things like 1.1.1 etc.
-    if (isdigit(LastChar) || LastChar == '.') { // Number: [0-9.]+
-        std::string NumStr;
-        do {
-            NumStr += LastChar;
-            LastChar = advance();
-        } while (isdigit(LastChar) || LastChar == '.');
-
-        NumVal = strtod(NumStr.c_str(), 0);
-        return Lexer::tok_number;
-    }
-
-    // Handle comments
-    // We skip to the end of the line then return the next token
-    if (LastChar == '#') {
-        // Comment until end of line.
-        do {
-            LastChar = advance();
-        } while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
-
-        if (LastChar != EOF) {
-            return gettok();
-        }
-    }
-
-    // If the input doesn't match one of the above cases, it is either an operator
-    // character like '+' or the end of file. Handle these below.
-
-    // Check for end of file. Don't eat the EOF
-    if (LastChar == EOF) {
-        return Lexer::tok_eof;
-    }
-
-    // Otherwise, just return the character as its ascii value.
-    int ThisChar = LastChar;
-    LastChar = advance();
-    return ThisChar;
-}
-
 // ================================================================
 // AST
 // ================================================================
@@ -160,10 +58,10 @@ namespace {
 
 // ExprAST - Base class for all expression nodes.
 class ExprAST {
-    SourceLocation Loc;
+    Lexer::SourceLocation Loc;
 
 public:
-    ExprAST(SourceLocation Loc = CurLoc) : Loc(Loc) {}
+    ExprAST(Lexer::SourceLocation Loc = lexer.getLexLoc()) : Loc(Loc) {}
     virtual ~ExprAST() {}
     virtual Value *codegen() = 0;
     int getLine() const { return Loc.Line; }
@@ -211,7 +109,7 @@ class BinaryExprAST : public ExprAST {
     std::unique_ptr<ExprAST> LHS, RHS;
 
 public:
-    BinaryExprAST(SourceLocation Loc,
+    BinaryExprAST(Lexer::SourceLocation Loc,
             char op,
             std::unique_ptr<ExprAST> LHS,
             std::unique_ptr<ExprAST> RHS) :
@@ -243,7 +141,7 @@ class PrototypeAST {
     int Line;
 
 public:
-    PrototypeAST(SourceLocation Loc, const std::string &name,
+    PrototypeAST(Lexer::SourceLocation Loc, const std::string &name,
             std::vector<std::string> Args, bool IsOperator = false, unsigned Prec = 0)
         : Name(name), Args(std::move(Args)), IsOperator(IsOperator),
         Precedence(Prec), Line(Loc.Line) {};
@@ -324,15 +222,6 @@ static std::unique_ptr<ExprAST> ParseForExpr();
 static std::unique_ptr<ExprAST> ParseUnary();
 static std::unique_ptr<ExprAST> ParseVarExpr();
 
-// CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
-// token the parser is looking at. getNextToken reads another token from the lexer
-// and updates CurTok with its results.
-static int CurTok;
-// Allows us to look one token ahead at what the lexer is returning.
-static int getNextToken() {
-    return CurTok = gettok();
-}
-
 // Error* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> Error(const char *Str) {
     fprintf(stderr, "Error: %s\n", Str);
@@ -367,8 +256,8 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 // and returns.
 // numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
-    auto Result = llvm::make_unique<NumberExprAST>(NumVal);
-    getNextToken(); // consume the number
+    auto Result = llvm::make_unique<NumberExprAST>(lexer.getNumVal());
+    lexer.getNextToken(); // consume the number
     return std::move(Result);
 }
 
@@ -379,14 +268,14 @@ static std::unique_ptr<ExprAST> ParseNumberExpr() {
 // We recursively call ParseExpression, this is powerful because we can handle recursive grammars.
 // parenexpr ::= '(' expression ')'
 static std::unique_ptr<ExprAST> ParseParenExpr() {
-    getNextToken(); // eat (.
+    lexer.getNextToken(); // eat (.
     auto V = ParseExpression();
     if (!V)
         return nullptr;
 
-    if (CurTok != ')')
+    if (lexer.getCurTok() != ')')
         return Error("expected ')'");
-    getNextToken(); // eat ).
+    lexer.getNextToken(); // eat ).
     return V;
 }
 
@@ -398,17 +287,17 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
 //  ::= identifier
 //  ::= identifier '(' expression* ')'
 static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
-    std::string IdName = IdentifierStr;
+    std::string IdName = lexer.getIdentifierStr();
 
-    getNextToken(); // eat identifier
+    lexer.getNextToken(); // eat identifier
 
-    if (CurTok != '(') // Simple variable ref
+    if (lexer.getCurTok() != '(') // Simple variable ref
         return llvm::make_unique<VariableExprAST>(IdName);
 
     // Call.
-    getNextToken(); // Eat (
+    lexer.getNextToken(); // Eat (
     std::vector<std::unique_ptr<ExprAST>> Args;
-    if (CurTok != ')') {
+    if (lexer.getCurTok() != ')') {
         while (1) {
             if (auto Arg = ParseExpression()) {
                 Args.push_back(std::move(Arg));
@@ -416,17 +305,17 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
                 return nullptr;
             }
 
-            if (CurTok == ')')
+            if (lexer.getCurTok() == ')')
                 break;
 
-            if (CurTok != ',')
+            if (lexer.getCurTok() != ',')
                 return Error("Expected ')' or ',' in argument list");
-            getNextToken(); // eat the ','
+            lexer.getNextToken(); // eat the ','
         }
     }
 
     // Eat the ')'.
-    getNextToken();
+    lexer.getNextToken();
 
     return llvm::make_unique<CallExprAST>(IdName, std::move(Args));
 }
@@ -439,7 +328,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
 //  ::= forexpr
 //  ::= varexpr
 static std::unique_ptr<ExprAST> ParsePrimary() {
-    switch (CurTok) {
+    switch (lexer.getCurTok()) {
         default:
             return Error("unknown token when expecting an expression");
         case Lexer::tok_identifier:
@@ -465,11 +354,11 @@ static std::map<char, int> BinopPrecedence;
 
 // GetTokPrecedence - Get the precedence of the pending binary operator token.
 static int GetTokPrecedence() {
-    if (!isascii(CurTok))
+    if (!isascii(lexer.getCurTok()))
         return -1;
 
     // Make sure it's a declared binop.
-    int TokPrec = BinopPrecedence[CurTok];
+    int TokPrec = BinopPrecedence[lexer.getCurTok()];
     if (TokPrec <= 0) return -1;
     return TokPrec;
 }
@@ -491,9 +380,9 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
             return LHS;
 
         // Okay, we know this is a binop.
-        int BinOp = CurTok;
-        SourceLocation BinLoc = CurLoc;
-        getNextToken(); // eat binop
+        int BinOp = lexer.getCurTok();
+        Lexer::SourceLocation BinLoc = lexer.getLexLoc();
+        lexer.getNextToken(); // eat binop
 
         // Parse the unary expression after the binary operator
         auto RHS = ParseUnary();
@@ -521,60 +410,60 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
     std::string FnName;
 
-    SourceLocation FnLoc = CurLoc;
+    Lexer::SourceLocation FnLoc = lexer.getLexLoc();
 
     unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
     unsigned BinaryPrecedence = 30;
 
-    switch (CurTok) {
+    switch (lexer.getCurTok()) {
     default:
         return ErrorP("Expected function name in prototype");
     case Lexer::tok_identifier:
-        FnName = IdentifierStr;
+        FnName = lexer.getIdentifierStr();
         Kind = 0;
-        getNextToken(); // eat identifier
+        lexer.getNextToken(); // eat identifier
         break;
     case Lexer::tok_unary:
-        getNextToken(); // eat 'unary'
-        if (!isascii(CurTok))
+        lexer.getNextToken(); // eat 'unary'
+        if (!isascii(lexer.getCurTok()))
             return ErrorP("Expected unary operator");
         FnName = "unary";
-        FnName += (char)CurTok;
+        FnName += (char)lexer.getCurTok();
         Kind = 1;
-        getNextToken(); // eat ascii operator
+        lexer.getNextToken(); // eat ascii operator
         break;
     case Lexer::tok_binary:
-        getNextToken(); // eat 'binary'
-        if (!isascii(CurTok))
+        lexer.getNextToken(); // eat 'binary'
+        if (!isascii(lexer.getCurTok()))
             return ErrorP("Expected ascii binary operator");
         FnName = "binary";
-        FnName += (char)CurTok;
+        FnName += (char)lexer.getCurTok();
         Kind = 2;
-        getNextToken(); // eat ascii operator
+        lexer.getNextToken(); // eat ascii operator
 
         // Read the precedence if present
-        if (CurTok == Lexer::tok_number) {
-            if (NumVal < 1 || NumVal > 100)
+        if (lexer.getCurTok() == Lexer::tok_number) {
+            if (lexer.getNumVal() < 1 || lexer.getNumVal() > 100)
                 return ErrorP("Invalid precedence: must be 1..100");
-            BinaryPrecedence = (unsigned)NumVal;
-            getNextToken(); // eat precedence
+            BinaryPrecedence = (unsigned)lexer.getNumVal();
+            lexer.getNextToken(); // eat precedence
         }
         break;
     }
 
-    if (CurTok != '(')
+    if (lexer.getCurTok() != '(')
         return ErrorP("Expected '(' in prototype");
 
     // Read list of argument names
     std::vector<std::string> ArgNames;
-    while (getNextToken() == Lexer::tok_identifier) {
-        ArgNames.push_back(IdentifierStr);
+    while (lexer.getNextToken() == Lexer::tok_identifier) {
+        ArgNames.push_back(lexer.getIdentifierStr());
     }
-    if (CurTok != ')')
+    if (lexer.getCurTok() != ')')
         return ErrorP("Expected ')' in prototype");
 
     // success
-    getNextToken(); // eat ')'
+    lexer.getNextToken(); // eat ')'
 
     // Verify right number of names for operator.
     if (Kind > 0 && ArgNames.size() != Kind)
@@ -587,7 +476,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 // Function definition, just a prototype plus an expression to implement the body
 // definition ::= 'def' prototype expression 'end'
 static std::unique_ptr<FunctionAST> ParseDefinition() {
-    getNextToken(); // eat def.
+    lexer.getNextToken(); // eat def.
     auto Proto = ParsePrototype();
     if (!Proto) return nullptr;
 
@@ -595,10 +484,10 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
     if (!E)
         return nullptr;
 
-    if (CurTok != Lexer::tok_end)
+    if (lexer.getCurTok() != Lexer::tok_end)
         return ErrorF("expected 'end' after function definition");
 
-    getNextToken(); // eat 'end'
+    lexer.getNextToken(); // eat 'end'
 
     return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
 }
@@ -607,7 +496,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
 // forward declarations of user functions. These are just prototypes with no body.
 // external ::= 'extern' prototype
 static std::unique_ptr<PrototypeAST> ParseExtern() {
-    getNextToken(); // eat extern.
+    lexer.getNextToken(); // eat extern.
     return ParsePrototype();
 }
 
@@ -615,7 +504,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 // Will handle this by defining anonymous nullary (zero argument) functions for them
 // toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
-    SourceLocation FnLoc = CurLoc;
+    Lexer::SourceLocation FnLoc = lexer.getLexLoc();
     if (auto E = ParseExpression()) {
         // Make anonymous proto
         auto Proto = llvm::make_unique<PrototypeAST>(FnLoc, "main", std::vector<std::string>());
@@ -627,32 +516,32 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 // If expression parsing
 // ifexpr ::= 'if' expression 'then' expression 'else' expression 'end'
 static std::unique_ptr<ExprAST> ParseIfExpr() {
-    getNextToken(); // eat the if
+    lexer.getNextToken(); // eat the if
 
     // condition
     auto Cond = ParseExpression();
     if (!Cond)
         return nullptr;
 
-    if (CurTok != Lexer::tok_then)
+    if (lexer.getCurTok() != Lexer::tok_then)
         return Error("expected then");
-    getNextToken(); // eat the then
+    lexer.getNextToken(); // eat the then
 
     auto Then = ParseExpression();
     if (!Then)
         return nullptr;
 
-    if (CurTok != Lexer::tok_else)
+    if (lexer.getCurTok() != Lexer::tok_else)
         return Error("expected else");
-    getNextToken(); // eat the else
+    lexer.getNextToken(); // eat the else
 
     auto Else = ParseExpression();
     if (!Else)
         return nullptr;
 
-    if (CurTok != Lexer::tok_end)
+    if (lexer.getCurTok() != Lexer::tok_end)
         return Error("expected 'end' after if expression");
-    getNextToken(); // eat 'end'
+    lexer.getNextToken(); // eat 'end'
 
     return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
 }
@@ -661,24 +550,24 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
 // The step value is optional
 // forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
 static std::unique_ptr<ExprAST> ParseForExpr() {
-    getNextToken(); // eat the for.
+    lexer.getNextToken(); // eat the for.
 
-    if (CurTok != Lexer::tok_identifier)
+    if (lexer.getCurTok() != Lexer::tok_identifier)
         return Error("expected identifier after for");
 
-    std::string IdName = IdentifierStr;
-    getNextToken(); // eat identifier
+    std::string IdName = lexer.getIdentifierStr();
+    lexer.getNextToken(); // eat identifier
 
-    if (CurTok != '=')
+    if (lexer.getCurTok() != '=')
         return Error("expected '=' after for");
-    getNextToken(); // eat '='
+    lexer.getNextToken(); // eat '='
 
     auto Start = ParseExpression();
     if (!Start)
         return nullptr;
-    if (CurTok != ',')
+    if (lexer.getCurTok() != ',')
         return Error("expected ',' after for start value");
-    getNextToken(); // eat ','
+    lexer.getNextToken(); // eat ','
 
     auto End = ParseExpression();
     if (!End)
@@ -686,24 +575,24 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 
     // The step value is optional
     std::unique_ptr<ExprAST> Step;
-    if (CurTok == ',') {
-        getNextToken(); // eat ','
+    if (lexer.getCurTok() == ',') {
+        lexer.getNextToken(); // eat ','
         Step = ParseExpression();
         if (!Step)
             return nullptr;
     }
 
-    if (CurTok != Lexer::tok_in)
+    if (lexer.getCurTok() != Lexer::tok_in)
         return Error("expected 'in' after for");
-    getNextToken(); // eat 'in'.
+    lexer.getNextToken(); // eat 'in'.
 
     auto Body = ParseExpression();
     if (!Body)
         return nullptr;
 
-    if (CurTok != Lexer::tok_end)
+    if (lexer.getCurTok() != Lexer::tok_end)
         return Error("expected 'end' after for");
-    getNextToken(); // eat 'end'
+    lexer.getNextToken(); // eat 'end'
 
     return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
@@ -719,12 +608,12 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 //  ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
     // If the current token is not an operator, it must be a primary expr.
-    if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+    if (!isascii(lexer.getCurTok()) || lexer.getCurTok() == '(' || lexer.getCurTok() == ',')
         return ParsePrimary();
 
     // If this is a unary operator, read it.
-    int Opc = CurTok;
-    getNextToken(); // eat unary operator
+    int Opc = lexer.getCurTok();
+    lexer.getNextToken(); // eat unary operator
     if (auto Operand = ParseUnary())
         return llvm::make_unique<UnaryExprAST>(Opc, std::move(Operand));
     return nullptr;
@@ -733,23 +622,23 @@ static std::unique_ptr<ExprAST> ParseUnary() {
 // varexpr ::= 'var' identifier ('=' expression)?
 //                  (',' identifier ('=' expression)?* 'in' expression 'end'
 static std::unique_ptr<ExprAST> ParseVarExpr() {
-    getNextToken(); // eat the 'var'.
+    lexer.getNextToken(); // eat the 'var'.
 
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
 
     // At least on variable name is required.
-    if (CurTok != Lexer::tok_identifier)
+    if (lexer.getCurTok() != Lexer::tok_identifier)
         return Error("expected identifier after var");
 
     // Parse the list of identifier/expr pairs into the local `VarNames` vector.
     while (1) {
-        std::string Name = IdentifierStr;
-        getNextToken(); // eat identifier
+        std::string Name = lexer.getIdentifierStr();
+        lexer.getNextToken(); // eat identifier
 
         // Read the optional initializer.
         std::unique_ptr<ExprAST> Init;
-        if (CurTok == '=') {
-            getNextToken(); // eat the '='
+        if (lexer.getCurTok() == '=') {
+            lexer.getNextToken(); // eat the '='
 
             Init = ParseExpression();
             if (!Init)
@@ -759,27 +648,27 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
         VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
         // End of var list, exit loop.
-        if (CurTok != ',')
+        if (lexer.getCurTok() != ',')
             break;
 
-        getNextToken(); // eat the ','
+        lexer.getNextToken(); // eat the ','
 
-        if (CurTok != Lexer::tok_identifier)
+        if (lexer.getCurTok() != Lexer::tok_identifier)
             return Error("expected identifier list after var");
     }
 
     // At this point we have to have 'in'.
-    if (CurTok != Lexer::tok_in)
+    if (lexer.getCurTok() != Lexer::tok_in)
         return Error("expected 'in' keyword after 'var'");
-    getNextToken(); // eat 'in'.
+    lexer.getNextToken(); // eat 'in'.
 
     auto Body = ParseExpression();
     if (!Body)
         return nullptr;
 
-    if (CurTok != Lexer::tok_end)
+    if (lexer.getCurTok() != Lexer::tok_end)
         return Error("expected 'end' after 'var'");
-    getNextToken(); // eat 'end'
+    lexer.getNextToken(); // eat 'end'
 
     return llvm::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
 }
@@ -1376,7 +1265,7 @@ static void HandleDefinition() {
         }
     } else {
         // Skip token for error recovery.
-        getNextToken();
+        lexer.getNextToken();
     }
 }
 
@@ -1388,7 +1277,7 @@ static void HandleExtern() {
             FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     } else {
         // Skip token for error recovery.
-        getNextToken();
+        lexer.getNextToken();
     }
 }
 
@@ -1399,7 +1288,7 @@ static void HandleTopLevelExpression() {
             fprintf(stderr, "Error generating code for top level expression");
     } else {
         // Skip token for error recovery.
-        getNextToken();
+        lexer.getNextToken();
     }
 }
 
@@ -1411,11 +1300,11 @@ static void HandleTopLevelExpression() {
 // top ::= definition | external | expression | ';'
 static void MainLoop() {
     while (1) {
-        switch(CurTok) {
+        switch(lexer.getCurTok()) {
         case Lexer::tok_eof:
             return;
         case ';': // ignore top-level semicolons.
-            getNextToken();
+            lexer.getNextToken();
             break;
         case Lexer::tok_def:
             HandleDefinition();
@@ -1479,7 +1368,7 @@ int main() {
     BinopPrecedence['*'] = 40; // Highest
 
     // Prime the first token.
-    getNextToken();
+    lexer.getNextToken();
 
     // Initialize the JIT
     TheJIT = llvm::make_unique<KaleidoscopeJIT>();

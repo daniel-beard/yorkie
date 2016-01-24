@@ -12,6 +12,7 @@ set (CMAKE_CXX_STANDARD 11)
 # file(GLOB SOURCES "src/*.cpp")
 file (GLOB YORKIE_SRC
     "include/*.h"
+    "lib/Lexer.cpp"
     "lib/toy.cpp"
 )
 

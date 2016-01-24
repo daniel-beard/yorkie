@@ -2,8 +2,18 @@
 #ifndef YORKIE_LEXER_H
 #define YORKIE_LEXER_H
 
+#include <string>
+
+//===============================================
+// Lexer.h
+//
+// Breaks input up into tokens.
+//
+//===============================================
+
 namespace Lexer {
-// http://llvm.org/docs/tutorial/LangImpl1.html#the-lexer
+
+
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
 // of these for known things.
 enum Token {
@@ -35,6 +45,36 @@ enum Token {
     tok_end = -14,
 };
 
+// Source Location Information
+struct SourceLocation {
+    int Line;
+    int Col;
+};
+
+class Lexer {
+    SourceLocation LexLoc = {1, 0}; // Lexer source location
+    std::string IdentifierStr;      // Filled in if tok_identifier
+    double NumVal;                  // Filled in if tok_number
+    // CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
+    // token the parser is looking at. getNextToken reads another token from the lexer
+    // and updates CurTok with its results.
+    int CurTok;
+
+    // Private methods
+    int advance();
+
+public:
+
+    // Accessors for private member declarations
+    SourceLocation getLexLoc() { return LexLoc; }
+    std::string getIdentifierStr() { return IdentifierStr; }
+    double getNumVal() { return NumVal; }
+    int getCurTok() { return CurTok; }
+
+    // Public methods
+    int gettok();           // Return the next token from standard input.
+    int getNextToken();     // Allows us to look one token ahead at what the lexer is returning.
+};
 
 }
 
