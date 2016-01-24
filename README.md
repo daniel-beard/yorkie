@@ -57,34 +57,11 @@ def foo()
 
 ### Building
 - Make sure you have LLVM setup - http://llvm.org/docs/GettingStarted.html
-- Run the command `make`
-- Run the binary `./toy`
+- Run the command `cmake .`
+- Run `make`
 
 ### License
 - MIT
-
-### Progress / TODO
-- [ ] Refactor out into different classes, e.g. Lexer, Parser, CodeGen, etc.
-- [ ] Investigate the built in cl:: namespace (command line parsing).
-- [ ] Create a native stdlib version with some operators.
-- [ ] main return type is incorrectly flagged in DWARF description
-- [ ] Function definitions should have commas between parameters
-- [ ] If statements should support multiple expressions
-- [ ] If statements should have an `if/end` variant (without `else`).
-- [ ] If statements should have an `elseif` variant
-- [ ] Add extra dump methods to the rest of the AST declarations
-- [ ] Fix CI
-- [ ] Add import statements
-- [ ] Allow compiler to build files (not just from stdin).
-- [ ] Global variables
-- [ ] Typed variables
-- [ ] Arrays
-- [ ] Standard runtime
-- [ ] Add simple string type (array of chars)
-- [ ] Add mandlebrot renderer - http://llvm.org/docs/tutorial/LangImpl6.html#kicking-the-tires
-- [ ] Memory management
-- [ ] Exception handling support
-- [ ] OO support
 
 ### References / Links
 - http://llvm.org/docs/LangRef.html contains references to other interesting instructions that should be relatively easy to add to this language.
