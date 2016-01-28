@@ -24,6 +24,7 @@
 #include <memory>
 #include "../include/KaleidoscopeJIT.h"
 #include "Lexer.h"
+#include "AST.h"
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -34,12 +35,6 @@ static Lexer::Lexer lexer = Lexer::Lexer();
 // IR Builder.
 static IRBuilder<> Builder(getGlobalContext());
 
-// Forward declarations for KSDbgInfo
-namespace {
-class ProtoTypeAST;
-class ExprAST;
-}
-
 struct DebugInfo {
     DICompileUnit *TheCU;
     DIType *DblTy;
@@ -48,167 +43,6 @@ struct DebugInfo {
     void emitLocation(ExprAST *AST);
     DIType *getDoubleTy();
 } KSDbgInfo;
-
-// ================================================================
-// AST
-// ================================================================
-
-// For now we are going to have expressions, prototypes and a function AST object.
-namespace {
-
-// ExprAST - Base class for all expression nodes.
-class ExprAST {
-    Lexer::SourceLocation Loc;
-
-public:
-    ExprAST(Lexer::SourceLocation Loc = lexer.getLexLoc()) : Loc(Loc) {}
-    virtual ~ExprAST() {}
-    virtual Value *codegen() = 0;
-    int getLine() const { return Loc.Line; }
-    int getCol() const { return Loc.Col; }
-    virtual raw_ostream &dump(raw_ostream &out, int ind) {
-        return out << ':' << getLine() << ':' << getCol() << '\n';
-    }
-};
-
-// NumberExprAST - Expression class for numeric literals like "1.0"
-class NumberExprAST: public ExprAST {
-    double Val;
-
-public:
-    NumberExprAST(double Val) : Val(Val) {}
-    Value *codegen() override;
-};
-
-// VariableExprAST - Expression class for referencing a variable, like "a".
-class VariableExprAST : public ExprAST {
-    std::string Name;
-
-public:
-    VariableExprAST(const std::string &Name) : Name(Name) {};
-    const std::string &getName() const { return Name; }
-    Value *codegen() override;
-};
-
-// VarExprAST - Expression class for var/in
-class VarExprAST : public ExprAST {
-    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-    std::unique_ptr<ExprAST> Body;
-
-public:
-    VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-            std::unique_ptr<ExprAST> Body)
-        : VarNames(std::move(VarNames)), Body(std::move(Body)) {}
-
-    Value *codegen();
-};
-
-// BinaryExprAST - Expression class for a binary operator.
-class BinaryExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-
-public:
-    BinaryExprAST(Lexer::SourceLocation Loc,
-            char op,
-            std::unique_ptr<ExprAST> LHS,
-            std::unique_ptr<ExprAST> RHS) :
-         ExprAST(Loc), Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-    Value *codegen() override;
-};
-
-// CallExprAST - Expression class for function calls.
-class CallExprAST : public ExprAST {
-    std::string Callee;
-    std::vector<std::unique_ptr<ExprAST> > Args;
-
-public:
-    CallExprAST(const std::string &Callee,
-            std::vector<std::unique_ptr<ExprAST> > Args) :
-        Callee(Callee), Args(std::move(Args)) {}
-    Value *codegen() override;
-};
-
-// PrototypeAST - This class represents the "prototype" for a function
-// which captures its name, and its argument names (this implicitly the number
-// of arguments the function takes).
-// Also supports user-defined operators.
-class PrototypeAST {
-    std::string Name;
-    std::vector<std::string> Args;
-    bool IsOperator;
-    unsigned Precedence; // Precedence if a binary op.
-    int Line;
-
-public:
-    PrototypeAST(Lexer::SourceLocation Loc, const std::string &name,
-            std::vector<std::string> Args, bool IsOperator = false, unsigned Prec = 0)
-        : Name(name), Args(std::move(Args)), IsOperator(IsOperator),
-        Precedence(Prec), Line(Loc.Line) {};
-    Function *codegen();
-    const std::string &getName() const { return Name; }
-
-    bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
-    bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
-
-    char getOperatorName() const {
-        assert(isUnaryOp() || isBinaryOp());
-        return Name[Name.size()-1];
-    }
-
-    unsigned getBinaryPrecedence() const { return Precedence; }
-    int getLine() const { return Line; }
-};
-
-// FunctionAST - This class represents a function definition itself.
-class FunctionAST {
-    std::unique_ptr<PrototypeAST> Proto;
-    std::unique_ptr<ExprAST> Body;
-
-public:
-    FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-            std::unique_ptr<ExprAST> Body) :
-        Proto(std::move(Proto)), Body(std::move(Body)) {}
-    Function *codegen();
-};
-
-// IfExprAST - Expression class for if/then/else
-class IfExprAST : public ExprAST {
-    std::unique_ptr<ExprAST> Cond, Then, Else;
-
-public:
-    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
-            std::unique_ptr<ExprAST> Else)
-        : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
-    Value *codegen();
-};
-
-// ForExprAST - Expression class for for/in.
-class ForExprAST : public ExprAST {
-    std::string VarName;
-    std::unique_ptr<ExprAST> Start, End, Step, Body;
-
-public:
-    ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
-            std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-            std::unique_ptr<ExprAST> Body)
-        : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
-        Step(std::move(Step)), Body(std::move(Body)) {}
-    Value *codegen();
-};
-
-// UnaryExprAST - Expression class for a unary operator.
-class UnaryExprAST : public ExprAST {
-    char Opcode;
-    std::unique_ptr<ExprAST> Operand;
-
-public:
-    UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
-        : Opcode(Opcode), Operand(std::move(Operand)) {}
-    Value *codegen();
-};
-
-} // end anonymous namespace
 
 // ================================================================
 // Parser
@@ -256,7 +90,7 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 // and returns.
 // numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
-    auto Result = llvm::make_unique<NumberExprAST>(lexer.getNumVal());
+    auto Result = llvm::make_unique<NumberExprAST>(lexer.getLexLoc(), lexer.getNumVal());
     lexer.getNextToken(); // consume the number
     return std::move(Result);
 }
@@ -292,7 +126,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
     lexer.getNextToken(); // eat identifier
 
     if (lexer.getCurTok() != '(') // Simple variable ref
-        return llvm::make_unique<VariableExprAST>(IdName);
+        return llvm::make_unique<VariableExprAST>(lexer.getLexLoc(), IdName);
 
     // Call.
     lexer.getNextToken(); // Eat (
@@ -317,7 +151,7 @@ static std::unique_ptr<ExprAST> ParseIndentifierExpr() {
     // Eat the ')'.
     lexer.getNextToken();
 
-    return llvm::make_unique<CallExprAST>(IdName, std::move(Args));
+    return llvm::make_unique<CallExprAST>(lexer.getLexLoc(), IdName, std::move(Args));
 }
 
 // primary
@@ -543,7 +377,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
         return Error("expected 'end' after if expression");
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
+    return llvm::make_unique<IfExprAST>(lexer.getLexLoc(), std::move(Cond), std::move(Then), std::move(Else));
 }
 
 // For expression parsing
@@ -594,7 +428,7 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
         return Error("expected 'end' after for");
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<ForExprAST>(IdName, std::move(Start),
+    return llvm::make_unique<ForExprAST>(lexer.getLexLoc(), IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
 }
 
@@ -615,7 +449,7 @@ static std::unique_ptr<ExprAST> ParseUnary() {
     int Opc = lexer.getCurTok();
     lexer.getNextToken(); // eat unary operator
     if (auto Operand = ParseUnary())
-        return llvm::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+        return llvm::make_unique<UnaryExprAST>(lexer.getLexLoc(), Opc, std::move(Operand));
     return nullptr;
 }
 
@@ -670,7 +504,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
         return Error("expected 'end' after 'var'");
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
+    return llvm::make_unique<VarExprAST>(lexer.getLexLoc(), std::move(VarNames), std::move(Body));
 }
 
 // ================================================================
