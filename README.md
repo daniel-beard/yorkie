@@ -53,12 +53,15 @@ def foo()
     var x = 10 in
         x = 11
     end
+end
 ```
 
 ### Building
 - Make sure you have LLVM setup - http://llvm.org/docs/GettingStarted.html
 - Run the command `cmake .`
 - Run `make`
+- Build one of the examples: `./yorkie < examples/fib.yk 2>&1 | clang -x ir -`
+- Run the example: `./a.out`
 
 ### License
 - MIT
