@@ -3,8 +3,6 @@ project(yorkie)
 
 include_directories(include)
 
-#set(SOURCES lib/toy.cpp)
-
 # Set C++11
 set (CMAKE_CXX_STANDARD 11)
 
@@ -12,6 +10,7 @@ set (CMAKE_CXX_STANDARD 11)
 # file(GLOB SOURCES "src/*.cpp")
 file (GLOB YORKIE_SRC
     "include/*.h"
+    "lib/Parser.cpp"
     "lib/Lexer.cpp"
     "lib/toy.cpp"
 )

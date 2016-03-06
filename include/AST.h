@@ -2,10 +2,12 @@
 #ifndef YORKIE_AST_H
 #define YORKIE_AST_H
 
+#include <iostream>
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 
 //===============================================
 // AST.h
