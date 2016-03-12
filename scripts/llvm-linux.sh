@@ -9,7 +9,7 @@ LLVM_TAR="${LLVM_FOLDER}.tar.xz"
 # Install cmake 3.5
 curl -o cmake.tar.gz https://cmake.org/files/v3.5/cmake-3.5.0-Linux-x86_64.tar.gz
 tar xf cmake.tar.gz
-ls -alh
+ls -alh cmake-3.5.0-Linux-x86_64
 sudo cp -r cmake-3.5.0-Linux-x86_64/* /usr/local
 cmake --version
 
