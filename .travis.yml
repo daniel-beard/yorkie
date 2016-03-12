@@ -5,9 +5,12 @@ before_install:
 - if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
-- clang -version
+- clang --version
+- sudo apt-get -qq update
+- sudo apt-get install -y cmake
 script:
-- make build
+- cmake .
+- make
 after_success:
 - ls
 #- echo "4+5;" | ./toy
