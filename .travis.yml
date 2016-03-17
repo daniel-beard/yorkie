@@ -6,10 +6,8 @@ before_install:
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 - clang --version
-- sudo apt-get -qq update
-- sudo apt-get install -y cmake
 script:
-- cmake .
+- cmake/bin/./cmake .
 - make
 after_success:
 - ls
