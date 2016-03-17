@@ -6,6 +6,9 @@ before_install:
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 - clang --version
+- sudo apt-get update -y
+- deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main
+- deb-src http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main
 script:
 - cmake/bin/./cmake .
 - make
