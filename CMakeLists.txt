@@ -28,7 +28,7 @@ EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' 
             OUTPUT_VARIABLE LLVM_CONFIG)
 MESSAGE("LLL ${LLVM_CONFIG}")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} ${LLVM_CONFIG} -std=c++14 -stdlib=libc++ -lc++abi")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} ${LLVM_CONFIG} -stdlib=libc++ -lc++abi")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
