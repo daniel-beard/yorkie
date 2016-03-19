@@ -3,8 +3,9 @@ project(yorkie)
 
 include_directories(include)
 
-# Set C++11
-set (CMAKE_CXX_STANDARD 11)
+# Set C++14
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 # Can use glob instead
 # file(GLOB SOURCES "src/*.cpp")
