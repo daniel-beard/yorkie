@@ -6,6 +6,9 @@ LLVM_VERSION="3.8.0"
 LLVM_FOLDER="clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04"
 LLVM_TAR="${LLVM_FOLDER}.tar.xz"
 
+echo "deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main" >> /etc/apt/sources.list
+echo "deb-src http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main" >> /etc/apt/sources.list
+
 # Install cmake 3.5
 CMAKE_FOLDER="cmake-3.5.0-Linux-x86_64"
 curl -o cmake.tar.gz https://cmake.org/files/v3.5/"$CMAKE_FOLDER".tar.gz
