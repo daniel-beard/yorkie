@@ -11,10 +11,9 @@ before_install:
 - which llvm-config
 - clang --version
 script:
-- echo "$CXX"
 - cmake .
 - make
 after_success:
-- ls
-#- echo "4+5;" | ./toy
+- ./yorkie < examples/fib.yk 2>&1 | clang -x ir -
+- ./a.out
 sudo: true
