@@ -1,4 +1,4 @@
-language: cpp
+language: objective-c
 osx_image: xcode7.2
 compiler:
 - clang
