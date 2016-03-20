@@ -12,7 +12,7 @@ before_install:
 - clang --version
 script:
 - echo "$CXX"
-- cmake/bin/./cmake .
+- cmake .
 - make
 after_success:
 - ls
