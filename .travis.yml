@@ -1,8 +1,12 @@
 language: cpp
+osx_image: xcode7.2
 compiler:
 - clang
 before_install:
-- if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
+- xcrun --show-sdk-path
+- brew update
+- brew install cmake
+- scripts/./osx.sh
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 - clang --version
@@ -14,5 +18,3 @@ after_success:
 - ls
 #- echo "4+5;" | ./toy
 sudo: true
-os: linux
-dist: trusty
