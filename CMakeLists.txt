@@ -3,8 +3,9 @@ project(yorkie)
 
 include_directories(include)
 
-# Set C++11
-set (CMAKE_CXX_STANDARD 11)
+# Set C++14
+# set(CMAKE_CXX_STANDARD 14)
+# set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 # Can use glob instead
 # file(GLOB SOURCES "src/*.cpp")
@@ -23,9 +24,16 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 # Extras
 # Generated from `llvm-config --cxxflags --ldflags --system-libs --libs`
 # Not entirely sure why we have to strip newlines from here. :/
-EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' '"
+# TODO: Figure out how to override -isysroot properly... :(
+EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' ' | sed 's/10.10/10.11/g'"
             OUTPUT_VARIABLE LLVM_CONFIG)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} ${LLVM_CONFIG}")
+MESSAGE("LLL ${LLVM_CONFIG}")
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} ${LLVM_CONFIG} -stdlib=libc++ -lc++abi")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
+MESSAGE("${CMAKE_CXX_FLAGS}")
 
 # Set your project compile flags.
 # E.g. if using the C++ header files

@@ -1,19 +1,19 @@
-language: cpp
+language: objective-c
+osx_image: xcode7.2
 compiler:
-- clang 
+- clang
 before_install:
-- if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/llvm-linux.sh; fi
+- xcrun --show-sdk-path
+- brew update
+- brew install cmake
+- scripts/./osx.sh
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
 - clang --version
-- sudo apt-get -qq update
-- sudo apt-get install -y cmake
 script:
 - cmake .
 - make
 after_success:
-- ls
-#- echo "4+5;" | ./toy
+- ./yorkie < examples/fib.yk 2>&1 | clang -x ir -
+- ./a.out
 sudo: true
-os: linux
-dist: trusty

@@ -1,5 +1,6 @@
 
 #include "Lexer.h"
+#include <cstdlib>
 
 int Lexer::Lexer::advance() {
     int LastChar = getchar();
