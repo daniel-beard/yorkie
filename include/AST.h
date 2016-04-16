@@ -8,7 +8,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-
+#include "Lexer.h"
 //===============================================
 // AST.h
 //
