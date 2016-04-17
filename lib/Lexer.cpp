@@ -3,7 +3,11 @@
 #include <cstdlib>
 
 int Lexer::Lexer::advance() {
-    int LastChar = getchar();
+    if (SourceIterator == SourceString.end()) {
+        return EOF;
+    }
+    int LastChar = *SourceIterator;
+    ++SourceIterator;
 
     if (LastChar == '\n' || LastChar == '\r') {
         LexLoc.Line++;
