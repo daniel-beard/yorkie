@@ -13,6 +13,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Support/CommandLine.h"
 #include <cctype>
 #include <cstdio>
 #include <map>
@@ -31,7 +32,7 @@ using namespace llvm;
 using namespace llvm::orc;
 
 // Lexer
-static Lexer::Lexer lexer = Lexer::Lexer();
+static Lexer::Lexer lexer;
 
 // IR Builder.
 static IRBuilder<> Builder(getGlobalContext());
@@ -743,7 +744,38 @@ static std::unique_ptr<Module> ParseInputIR(std::string InputFile) {
 // Main Driver code.
 // ================================================================
 
-int main() {
+// Command line options
+cl::OptionCategory
+CompilerCategory("Compiler Options", "Options for controlling the compilation process.");
+static cl::opt<std::string>
+InputFilename("input-file", cl::desc("File to compile (defaults to stdin)"),
+              cl::init("-"), cl::value_desc("filename"), cl::cat(CompilerCategory));
+static cl::alias
+InputFileAlias("i", cl::desc("Alias for -input-file"), cl::aliasopt(InputFilename));
+
+
+static void handleCommandLineOptions() {
+    // Open the file to compile.
+    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+    MemoryBuffer::getFileOrSTDIN(InputFilename);
+    if (std::error_code EC = FileOrErr.getError()) {
+        errs() << "Could not open input file '" << InputFilename
+        << "': " << EC.message() << '\n';
+        exit(2);
+    }
+    std::unique_ptr<MemoryBuffer> &File = FileOrErr.get();
+
+    // Initialize the lexer with the source
+    lexer = Lexer::Lexer(File->getBuffer().str());
+}
+
+
+int main(int argc, char **argv) {
+    llvm::cl::HideUnrelatedOptions( CompilerCategory );
+    llvm::cl::ParseCommandLineOptions(argc,argv);
+    handleCommandLineOptions();
+
+
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();

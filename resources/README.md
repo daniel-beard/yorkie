@@ -1,4 +1,4 @@
-## LLVM IR 
+## LLVM IR
 - This document gives some examples of the output LLVM IR from the yorkie language.
 - It is possible to generate the control-graph-flow images from LLVM IR with the following command:
 
@@ -85,7 +85,7 @@ Control flow graph:
 ![fibonacci control flow graph](fib.png)
 
 ### For loop
-Code: 
+Code:
 
 ```
 extern putchard(char)
@@ -119,3 +119,9 @@ afterloop:                                        ; preds = %loop
 Control flow graph:
 
 ![for loop control flow graph](for-loop.png)
+
+### Outputting Clang AST
+
+```
+clang -Xclang -ast-dump -fsyntax-only test.c
+```

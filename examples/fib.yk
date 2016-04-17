@@ -1,4 +1,3 @@
-
 extern putchard(x);
 def foo()
     putchard(42)

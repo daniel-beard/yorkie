@@ -52,9 +52,11 @@ struct SourceLocation {
 };
 
 class Lexer {
-    SourceLocation LexLoc = {1, 0}; // Lexer source location
-    std::string IdentifierStr;      // Filled in if tok_identifier
-    double NumVal;                  // Filled in if tok_number
+    std::string SourceString;               // Contains the source.
+    std::string::iterator SourceIterator;   // Source iterator
+    SourceLocation LexLoc = {1, 0};         // Lexer source location
+    std::string IdentifierStr;              // Filled in if tok_identifier
+    double NumVal;                          // Filled in if tok_number
     // CurTok/getNextToken - Provide a simple token buffer. CurTok is the current
     // token the parser is looking at. getNextToken reads another token from the lexer
     // and updates CurTok with its results.
@@ -64,6 +66,12 @@ class Lexer {
     int advance();
 
 public:
+
+    // Constructors
+    Lexer() {}
+    Lexer(std::string source) : SourceString(source) {
+        SourceIterator = SourceString.begin();
+    }
 
     // Accessors for private member declarations
     SourceLocation getLexLoc() { return LexLoc; }
