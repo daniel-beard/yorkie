@@ -27,6 +27,7 @@
 #include "Lexer.h"
 #include "AST.h"
 #include "Parser.h"
+#include "Utils.h"
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -45,23 +46,6 @@ struct DebugInfo {
     void emitLocation(ExprAST *AST);
     DIType *getDoubleTy();
 } KSDbgInfo;
-
-// =============================================================================
-// Error* - These are little helper functions for error handling.
-// =============================================================================
-
-std::unique_ptr<ExprAST> Error(const char *Str) {
-    fprintf(stderr, "Error: %s\n", Str);
-    return nullptr;
-}
-std::unique_ptr<PrototypeAST> ErrorP(const char *Str) {
-    Error(Str);
-    return nullptr;
-}
-std::unique_ptr<FunctionAST> ErrorF(const char *Str) {
-    Error(Str);
-    return nullptr;
-}
 
 // ================================================================
 // Debug Info Support
@@ -124,11 +108,6 @@ static std::map<std::string, AllocaInst*> NamedValues;
 static std::unique_ptr<llvm::legacy::FunctionPassManager> TheFPM;
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
-
-Value *ErrorV(const char *Str) {
-    Error(Str);
-    return nullptr;
-}
 
 // CreateEntryBlockAlloca - Create an alloca instruction in the entry block of the function.
 // This is used for mutable variables etc.
