@@ -13,6 +13,7 @@ file (GLOB YORKIE_SRC
     "include/*.h"
     "lib/Parser.cpp"
     "lib/Lexer.cpp"
+    "lib/Utils.cpp"
     "lib/toy.cpp"
 )
 
