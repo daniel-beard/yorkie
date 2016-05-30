@@ -135,23 +135,44 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer) {
             BinaryPrecedence);
 }
 
-// Function definition, just a prototype plus an expression to implement the body
-// definition ::= 'def' prototype expression 'end'
+// Function definition, just a prototype plus expressions (separated by ';') to implement the body
+// definition ::= 'def' prototype expression; expression; ... 'end'
 std::unique_ptr<FunctionAST> ParseDefinition(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat def.
     auto Proto = ParsePrototype(lexer);
     if (!Proto) return nullptr;
 
-    auto E = ParseExpression(lexer);
-    if (!E)
-        return nullptr;
+    // Vector to store function body expressions
+    typedef std::vector<std::unique_ptr<ExprAST>> FunctionBodyType;
+    auto BodyExprs = llvm::make_unique<FunctionBodyType>(FunctionBodyType());
+
+    while (lexer.getCurTok() != Lexer::tok_end) {
+
+        // Opportunity here to narrow allowed AST in Functions
+        // ...
+
+        // Parse body expressions
+        std::unique_ptr<ExprAST> E = ParseExpression(lexer);
+        if (!E)
+            return nullptr;
+        BodyExprs->push_back(std::move(E));
+
+        // Either more expressions (;, expression ...) or 'end'
+        if (lexer.getCurTok() == ';') {
+            lexer.getNextToken(); // eat ';'
+        } else {
+            if (lexer.getCurTok() != Lexer::tok_end) {
+                return ErrorF("expected ';' or 'end' after function definition");
+            }
+        }
+    }
 
     if (lexer.getCurTok() != Lexer::tok_end)
         return ErrorF("expected 'end' after function definition");
 
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(BodyExprs));
 }
 
 // Support extern to declare functions like 'sin' and 'cos' as well as to support
@@ -170,7 +191,11 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr(Lexer::Lexer &lexer) {
     if (auto E = ParseExpression(lexer)) {
         // Make anonymous proto
         auto Proto = llvm::make_unique<PrototypeAST>(FnLoc, "main", std::vector<std::string>());
-        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+
+        typedef std::vector<std::unique_ptr<ExprAST>> FunctionBodyType;
+        auto Body = llvm::make_unique<FunctionBodyType>(FunctionBodyType());
+        Body->push_back(std::move(E));
+        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
     }
     return nullptr;
 }

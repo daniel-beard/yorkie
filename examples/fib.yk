@@ -1,5 +1,18 @@
 extern putchard(x);
 def foo()
-    putchard(42)
+    putchard(72); # H
+    putchard(69); # E
+    putchard(76); # L
+    putchard(76); # L
+    putchard(79); # O
+    
+    putchard(32); # Space
+
+    putchard(87); # W
+    putchard(79); # O
+    putchard(82); # R
+    putchard(76); # L
+    putchard(68); # D
+    
 end
 foo();

@@ -5,7 +5,7 @@ syntax: glob
 
 yorkie
 toy
-toy.dSYM
+*.dSYM/
 lib/stdlib.ll
 yorkie.build/
 

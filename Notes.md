@@ -24,6 +24,28 @@
 ### Compiling C down to LLVM IR
 `clang -S -emit-llvm foo.c`
 
+### Debugging with source information
+- Compile examples/fib.yk down to a.out
+- Make sure fib.yk exists in the working directory
+- `lldb a.out`
+- `(lldb) breakpoint set --name foo`
+- `(lldb) run`
+
+```
+(lldb) run
+Process 21213 launched: '/Users/dbeard/Dev/yorkie/a.out' (x86_64)
+Process 21213 stopped
+* thread #1: tid = 0xb2954, 0x0000000100000dfc a.out`foo + 12 at fib.yk:3, queue = 'com.apple.main-thread', stop reason = breakpoint 1.1
+    frame #0: 0x0000000100000dfc a.out`foo + 12 at fib.yk:3
+   1   	extern putchard(x);
+   2   	def foo()
+-> 3   	    putchard(72) # H
+   4   	    putchard(69) # E
+   5   	    putchard(76) # L
+   6   	    putchard(76) # L
+   7   	    putchard(79) # O
+```
+
 ### Other compiling notes
 - Compile several files down to .ll format
 

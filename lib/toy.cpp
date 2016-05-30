@@ -341,11 +341,21 @@ Function *FunctionAST::codegen() {
         NamedValues[Arg.getName()] = Alloca;
     }
 
-    KSDbgInfo.emitLocation(Body.get());
+    // Codegen each body expression
+    bool GenerationSuccess = true;
+    Value *RetVal = nullptr;
+    for (auto &body : *Body) {
+        KSDbgInfo.emitLocation(body.get());
+
+        if (Value *Val = body->codegen()) {
+            RetVal = Val; // Set return value
+        } else {
+            GenerationSuccess = false;
+        }
+    }
 
     // If no error, emit the ret instruction, which completes the function.
-    if (Value *RetVal = Body->codegen()) {
-
+    if (GenerationSuccess && RetVal != nullptr) {
         // Special case "main"
         // TODO: Remove once proper type support is added
         if (P.getName() == "main") {
@@ -797,6 +807,7 @@ int main(int argc, char **argv) {
     // Create the compile unit for the module.
     // Currently down as fib.yk as a filename since we're redirecting stdin
     // but we'd like actual source locations.
+    // TODO: If this isn't building from STDIN, we should use the filename here to enable source debugging.
     KSDbgInfo.TheCU = DBuilder->createCompileUnit(dwarf::DW_LANG_C, "fib.yk", ".",
             "Yorkie Compiler", 0, "", 0);
 
