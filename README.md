@@ -63,6 +63,11 @@ end
 - Build one of the examples: `./yorkie < examples/fib.yk 2>&1 | clang -x ir -`
 - Run the example: `./a.out`
 
+### Testing
+- `cmake .`
+- `cmake --build .`
+- `ctest -VV`
+
 ### License
 - MIT
 
