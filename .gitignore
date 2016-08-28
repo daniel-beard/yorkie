@@ -8,6 +8,7 @@ toy
 *.dSYM/
 lib/stdlib.ll
 yorkie.build/
+build/
 
 # Compiled Object files
 *.slo
@@ -48,3 +49,10 @@ install_manifest.txt
 
 # Xcode 
 *.xcodeproj
+
+# Test
+googletest*/
+Testing/
+ext/gtest/*
+yorkie_test
+CTestTestfile.cmake
