@@ -12,10 +12,9 @@ include_directories(include)
 # file(GLOB SOURCES "src/*.cpp")
 file (GLOB YORKIE_SRC
     "include/*.h"
-    "lib/Parser.cpp"
-    "lib/Lexer.cpp"
-    "lib/Utils.cpp"
-    "lib/toy.cpp"
+    "include/Infrastructure/*.h"
+    "lib/Infrastructure/*.cpp"
+    "lib/*.cpp"
 )
 
 find_package(LLVM REQUIRED CONFIG)

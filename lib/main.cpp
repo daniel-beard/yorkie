@@ -28,6 +28,8 @@
 #include "AST.h"
 #include "Parser.h"
 #include "Utils.h"
+#include "Driver.h"
+#include "ASTContext.h"
 
 using namespace llvm;
 using namespace llvm::orc;
