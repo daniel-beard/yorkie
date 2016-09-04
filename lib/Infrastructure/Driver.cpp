@@ -5,6 +5,6 @@ void Driver::run() {
 
 }
 
-void Driver::add(PassClosure Pass) {
-    Passes.push_back(Pass);
+void Driver::add(Pass pass) {
+    Passes.push_back(pass);
 }

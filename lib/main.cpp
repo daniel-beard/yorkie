@@ -762,6 +762,21 @@ static void handleCommandLineOptions() {
 
 
 int main(int argc, char **argv) {
+
+    // 1. Handle Options
+
+    // 2. Initialize ASTContext
+
+    // 3. Initialize Driver
+
+    // 4. Passes:
+        // 4.1 Parsing pass
+        // 4.2 AST Dumping pass
+        // 4.3 CodeGen pass
+
+
+
+
     llvm::cl::HideUnrelatedOptions( CompilerCategory );
     llvm::cl::ParseCommandLineOptions(argc,argv);
     handleCommandLineOptions();
@@ -789,7 +804,7 @@ int main(int argc, char **argv) {
     InitializeModule();
 
     // Link in the stdlib
-    auto M = ParseInputIR("lib/stdlib.ll");
+    auto M = ParseInputIR("lib/stdlib/stdlib.ll");
     bool LinkErr = llvm::Linker::linkModules(*TheModule, std::move(M));
     if (LinkErr) {
         fprintf(stderr, "Error linking modules");
