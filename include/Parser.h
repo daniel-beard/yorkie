@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "Lexer.h"
+#include "ASTContext.h"
 
 //===============================================
 // Parser.h
@@ -19,13 +20,25 @@ class ExprAST;
 class FunctionAST;
 class PrototypeAST;
 
-namespace Parser {
+class Parser {
 
+private:
     // Handle binary operator precedence
     // https://en.wikipedia.org/wiki/Operator-precedence_parser
+    // BinopPrecendence - This holds the precedence for each binary operator that is defined.
+    std::map<char, int> BinopPrecedence;
 
-    // BinopPrecendence - This holds the precendence for each binary operator that is defined.
-    static std::map<char, int> BinopPrecedence;
+    //TODO: Probably a better way to define these as private.
+    void HandleTopLevelExpression(Lexer::Lexer &lexer);
+    void HandleExtern(Lexer::Lexer &lexer);
+    void HandleDefinition(Lexer::Lexer &lexer, ASTContext context);
+    int GetTokPrecedence(Lexer::Lexer &lexer);
+
+public:
+
+    Parser();
+
+    void ParseTopLevel(Lexer::Lexer &lexer, ASTContext context);
 
     std::unique_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer);
     std::unique_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer);
@@ -42,6 +55,6 @@ namespace Parser {
     std::unique_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer);
     std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS, Lexer::Lexer &lexer);
 
-}
+};
 
 #endif /* end of include guard:  */

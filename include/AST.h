@@ -29,6 +29,14 @@ public:
     }
 };
 
+// CompoundExprAST - Multiple expressions, used within FunctionAST or IfExprAST
+class CompoundExprAST: public ExprAST {
+    std::unique_ptr<std::vector<std::unique_ptr<ExprAST>>> Body;
+
+public:
+    CompoundExprAST(Lexer::SourceLocation Loc, std::unique_ptr<std::vector<std::unique_ptr<ExprAST>>> Body) : ExprAST(Loc), Body(std::move(Body)) {};
+};
+
 // NumberExprAST - Expression class for numeric literals like "1.0"
 class NumberExprAST: public ExprAST {
     double Val;

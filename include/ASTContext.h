@@ -26,6 +26,9 @@ public:
     // Initializer
     ASTContext(std::string FileName) : FileName(FileName) {}
 
+    // Methods
+    void addFunction(std::unique_ptr<FunctionAST> function);
+
 };
 
 #endif /* ASTContext_h */

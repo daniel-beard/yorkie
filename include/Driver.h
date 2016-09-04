@@ -16,10 +16,15 @@
 
 typedef std::function<ASTContext(void)> PassClosure;
 
+namespace Yorkie {
+
 class Pass {
 public:
     Pass(std::string Name, ASTContext Context, PassClosure Function) :
         Name(Name), Context(Context), Function(Function) {}
+
+    //TODO: Might need to take into account ASTContext here...
+    void run();
 
 private:
     std::string Name;
@@ -39,5 +44,6 @@ private:
 
 };
 
+}
 
 #endif /* Driver_h */

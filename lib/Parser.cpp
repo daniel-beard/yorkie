@@ -4,14 +4,91 @@
 #include "AST.h"
 #include "Utils.h"
 
-namespace Parser {
+
+Parser::Parser() {
+    // Install standard binary operators
+    // 1 is lowest precendence
+    BinopPrecedence = std::map<char, int>();
+    BinopPrecedence['='] = 2;
+    BinopPrecedence['<'] = 10;
+    BinopPrecedence['+'] = 20;
+    BinopPrecedence['-'] = 30;
+    BinopPrecedence['*'] = 40; // Highest
+}
+
+
+// ================================================================
+// Top-Level parsing and JIT Driver
+// ================================================================
+
+void Parser::HandleDefinition(Lexer::Lexer &lexer, ASTContext context) {
+    if (auto FnAST = ParseDefinition(lexer)) {
+        context.addFunction(std::move(FnAST));
+//        if (!FnAST->codegen()) {
+//            fprintf(stderr, "Error reading function definition:");
+//        }
+    } else {
+        // Skip token for error recovery.
+        lexer.getNextToken();
+    }
+}
+
+void Parser::HandleExtern(Lexer::Lexer &lexer) {
+    if (auto ProtoAST = ParseExtern(lexer)) {
+//        if (!ProtoAST->codegen())
+//            fprintf(stderr, "Error reading extern");
+//        else
+//            FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
+    } else {
+        // Skip token for error recovery.
+        lexer.getNextToken();
+    }
+}
+
+void Parser::HandleTopLevelExpression(Lexer::Lexer &lexer) {
+    // Evaluate a top-level expression into an anonymous function.
+    if (auto FnAST = ParseTopLevelExpr(lexer)) {
+//        if (!FnAST->codegen())
+//            fprintf(stderr, "Error generating code for top level expression");
+    } else {
+        // Skip token for error recovery.
+        lexer.getNextToken();
+    }
+}
+
+// Driver invokes all of the parsing pieces with a top-level dispatch loop.
+// Ignore top level semicolons.
+// - Reason for this is so the parser knows whether that is the end of what you will type
+// at the command line.
+// - E.g. allows you to type 4+5; and the parser will know you are done.
+// top ::= definition | external | expression | ';'
+void Parser::ParseTopLevel(Lexer::Lexer &lexer, ASTContext context) {
+    while (1) {
+        switch(lexer.getCurTok()) {
+            case Lexer::tok_eof:
+                return;
+            case ';': // ignore top-level semicolons.
+                lexer.getNextToken();
+                break;
+            case Lexer::tok_def:
+                HandleDefinition(lexer, context);
+                break;
+//            case Lexer::tok_extern:
+//                HandleExtern();
+                break;
+            default:
+//                HandleTopLevelExpression();
+                break;
+        }
+    }
+}
 
 // =============================================================================
 // Private Functions
 // =============================================================================
 
 // GetTokPrecedence - Get the precedence of the pending binary operator token.
-int GetTokPrecedence(Lexer::Lexer &lexer) {
+int Parser::GetTokPrecedence(Lexer::Lexer &lexer) {
     if (!isascii(lexer.getCurTok()))
         return -1;
 
@@ -31,7 +108,7 @@ int GetTokPrecedence(Lexer::Lexer &lexer) {
 // the function is allowed to eat.
 // binoprhs
 //  ::= ('+' primary)*
-std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS, Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS, Lexer::Lexer &lexer) {
     // if this is a binop, find its precendence
     while (1) {
         int TokPrec = GetTokPrecedence(lexer);
@@ -69,7 +146,7 @@ std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LH
 // prototype
 //  ::= id '(' id* ')'
 //  ::= binary LETTER number? (id, id)
-std::unique_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer) {
+std::unique_ptr<PrototypeAST> Parser::ParsePrototype(Lexer::Lexer &lexer) {
     std::string FnName;
 
     Lexer::SourceLocation FnLoc = lexer.getLexLoc();
@@ -137,7 +214,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer) {
 
 // Function definition, just a prototype plus expressions (separated by ';') to implement the body
 // definition ::= 'def' prototype expression; expression; ... 'end'
-std::unique_ptr<FunctionAST> ParseDefinition(Lexer::Lexer &lexer) {
+std::unique_ptr<FunctionAST> Parser::ParseDefinition(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat def.
     auto Proto = ParsePrototype(lexer);
     if (!Proto) return nullptr;
@@ -178,7 +255,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Lexer::Lexer &lexer) {
 // Support extern to declare functions like 'sin' and 'cos' as well as to support
 // forward declarations of user functions. These are just prototypes with no body.
 // external ::= 'extern' prototype
-std::unique_ptr<PrototypeAST> ParseExtern(Lexer::Lexer &lexer) {
+std::unique_ptr<PrototypeAST> Parser::ParseExtern(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat extern.
     return ParsePrototype(lexer);
 }
@@ -186,7 +263,7 @@ std::unique_ptr<PrototypeAST> ParseExtern(Lexer::Lexer &lexer) {
 // Arbitrary top level expressions and evaluate on the fly.
 // Will handle this by defining anonymous nullary (zero argument) functions for them
 // toplevelexpr ::= expression
-std::unique_ptr<FunctionAST> ParseTopLevelExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<FunctionAST> Parser::ParseTopLevelExpr(Lexer::Lexer &lexer) {
     Lexer::SourceLocation FnLoc = lexer.getLexLoc();
     if (auto E = ParseExpression(lexer)) {
         // Make anonymous proto
@@ -208,7 +285,7 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr(Lexer::Lexer &lexer) {
 // unary
 //  ::= primary
 //  ::= '!' unary
-std::unique_ptr<ExprAST> ParseUnary(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseUnary(Lexer::Lexer &lexer) {
     // If the current token is not an operator, it must be a primary expr.
     if (!isascii(lexer.getCurTok()) || lexer.getCurTok() == '(' || lexer.getCurTok() == ',')
         return ParsePrimary(lexer);
@@ -225,7 +302,7 @@ std::unique_ptr<ExprAST> ParseUnary(Lexer::Lexer &lexer) {
 // [binop, primaryexpr] pairs.
 // expression
 //  ::= primary binoprhs
-std::unique_ptr<ExprAST> ParseExpression(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseExpression(Lexer::Lexer &lexer) {
     auto LHS = ParseUnary(lexer);
     if (!LHS)
         return nullptr;
@@ -235,7 +312,7 @@ std::unique_ptr<ExprAST> ParseExpression(Lexer::Lexer &lexer) {
 
 // varexpr ::= 'var' identifier ('=' expression)?
 //                  (',' identifier ('=' expression)?* 'in' expression 'end'
-std::unique_ptr<ExprAST> ParseVarExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseVarExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the 'var'.
 
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
@@ -290,7 +367,7 @@ std::unique_ptr<ExprAST> ParseVarExpr(Lexer::Lexer &lexer) {
 // For expression parsing
 // The step value is optional
 // forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
-std::unique_ptr<ExprAST> ParseForExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseForExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the for.
 
     if (lexer.getCurTok() != Lexer::tok_identifier)
@@ -341,8 +418,10 @@ std::unique_ptr<ExprAST> ParseForExpr(Lexer::Lexer &lexer) {
 
 // If expression parsing
 // ifexpr ::= 'if' expression 'then' expression 'else' expression 'end'
-std::unique_ptr<ExprAST> ParseIfExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the if
+
+    std::cout << "PARSING IF STATMENT" << std::endl;
 
     // condition
     auto Cond = ParseExpression(lexer);
@@ -378,7 +457,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Lexer::Lexer &lexer) {
 // We return null on an error.
 // We recursively call ParseExpression, this is powerful because we can handle recursive grammars.
 // parenexpr ::= '(' expression ')'
-std::unique_ptr<ExprAST> ParseParenExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseParenExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat (.
     auto V = ParseExpression(lexer);
     if (!V)
@@ -395,7 +474,7 @@ std::unique_ptr<ExprAST> ParseParenExpr(Lexer::Lexer &lexer) {
 // Takes the current number and creates a `NumberExprAST` node, advances to the next token
 // and returns.
 // numberexpr ::= number
-std::unique_ptr<ExprAST> ParseNumberExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseNumberExpr(Lexer::Lexer &lexer) {
     auto Result = llvm::make_unique<NumberExprAST>(lexer.getLexLoc(), lexer.getNumVal());
     lexer.getNextToken(); // consume the number
     return std::move(Result);
@@ -408,7 +487,7 @@ std::unique_ptr<ExprAST> ParseNumberExpr(Lexer::Lexer &lexer) {
 // identifierexpr
 //  ::= identifier
 //  ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParseIndentifierExpr(Lexer::Lexer &lexer) {
     std::string IdName = lexer.getIdentifierStr();
 
     lexer.getNextToken(); // eat identifier
@@ -449,7 +528,7 @@ std::unique_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer) {
 //  ::= ifexpr
 //  ::= forexpr
 //  ::= varexpr
-std::unique_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer) {
+std::unique_ptr<ExprAST> Parser::ParsePrimary(Lexer::Lexer &lexer) {
     switch (lexer.getCurTok()) {
         default:
             return Error("unknown token when expecting an expression", lexer);
@@ -468,4 +547,3 @@ std::unique_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer) {
     }
 }
 
-} // Namespace

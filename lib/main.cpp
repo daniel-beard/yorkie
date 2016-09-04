@@ -34,8 +34,7 @@
 using namespace llvm;
 using namespace llvm::orc;
 
-// Lexer
-static Lexer::Lexer lexer;
+
 
 // IR Builder.
 static IRBuilder<> Builder(getGlobalContext());
@@ -285,9 +284,10 @@ Function *FunctionAST::codegen() {
     if (!TheFunction)
         return nullptr;
 
+    //TODO: THIS WILL BREAK THINGS
     // If this is an operator, install it in the BinopPrecedence map.
-    if (P.isBinaryOp())
-        Parser::BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
+//    if (P.isBinaryOp())
+//        BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
 
     // Want to make sure that the function doesn't already have a body before we generate one.
     if (!TheFunction->empty())
@@ -379,8 +379,9 @@ Function *FunctionAST::codegen() {
     // Error reading body, remove function.
     TheFunction->eraseFromParent();
 
-    if (P.isBinaryOp())
-        Parser::BinopPrecedence.erase(Proto->getOperatorName());
+    //TODO: THIS WILL BREAK THINGS
+//    if (P.isBinaryOp())
+//        Parser::BinopPrecedence.erase(Proto->getOperatorName());
 
     // Pop off the lexical block for the function since we added it unconditionally
     KSDbgInfo.LexicalBlocks.pop_back();
@@ -634,72 +635,6 @@ void InitializeModule(void) {
     TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
 }
 
-
-// ================================================================
-// Top-Level parsing and JIT Driver
-// ================================================================
-
-static void HandleDefinition() {
-    if (auto FnAST = Parser::ParseDefinition(lexer)) {
-        if (!FnAST->codegen()) {
-            fprintf(stderr, "Error reading function definition:");
-        }
-    } else {
-        // Skip token for error recovery.
-        lexer.getNextToken();
-    }
-}
-
-static void HandleExtern() {
-    if (auto ProtoAST = Parser::ParseExtern(lexer)) {
-        if (!ProtoAST->codegen())
-            fprintf(stderr, "Error reading extern");
-        else
-            FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
-    } else {
-        // Skip token for error recovery.
-        lexer.getNextToken();
-    }
-}
-
-static void HandleTopLevelExpression() {
-    // Evaluate a top-level expression into an anonymous function.
-    if (auto FnAST = Parser::ParseTopLevelExpr(lexer)) {
-        if (!FnAST->codegen())
-            fprintf(stderr, "Error generating code for top level expression");
-    } else {
-        // Skip token for error recovery.
-        lexer.getNextToken();
-    }
-}
-
-// Driver invokes all of the parsing pieces with a top-level dispatch loop.
-// Ignore top level semicolons.
-// - Reason for this is so the parser knows whether that is the end of what you will type
-// at the command line.
-// - E.g. allows you to type 4+5; and the parser will know you are done.
-// top ::= definition | external | expression | ';'
-static void MainLoop() {
-    while (1) {
-        switch(lexer.getCurTok()) {
-        case Lexer::tok_eof:
-            return;
-        case ';': // ignore top-level semicolons.
-            lexer.getNextToken();
-            break;
-        case Lexer::tok_def:
-            HandleDefinition();
-            break;
-        case Lexer::tok_extern:
-            HandleExtern();
-            break;
-        default:
-            HandleTopLevelExpression();
-            break;
-        }
-    }
-}
-
 // ================================================================
 // "Library" functions that can be "extern'd" from user code.
 // ================================================================
@@ -745,91 +680,111 @@ static cl::alias
 InputFileAlias("i", cl::desc("Alias for -input-file"), cl::aliasopt(InputFilename));
 
 
-static void handleCommandLineOptions() {
-    // Open the file to compile.
-    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
-    MemoryBuffer::getFileOrSTDIN(InputFilename);
+//static void handleCommandLineOptions() {
+//    // Open the file to compile.
+//    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+//    MemoryBuffer::getFileOrSTDIN(InputFilename);
+//    if (std::error_code EC = FileOrErr.getError()) {
+//        errs() << "Could not open input file '" << InputFilename
+//        << "': " << EC.message() << '\n';
+//        exit(2);
+//    }
+//    std::unique_ptr<MemoryBuffer> &File = FileOrErr.get();
+//
+//    // Initialize the lexer with the source
+//    lexer = Lexer::Lexer(File->getBuffer().str());
+//}
+
+std::string fileContentsFromCommandLineOptions() {
+    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr = MemoryBuffer::getFile(InputFilename);
     if (std::error_code EC = FileOrErr.getError()) {
         errs() << "Could not open input file '" << InputFilename
         << "': " << EC.message() << '\n';
         exit(2);
     }
     std::unique_ptr<MemoryBuffer> &File = FileOrErr.get();
-
-    // Initialize the lexer with the source
-    lexer = Lexer::Lexer(File->getBuffer().str());
+    return File->getBuffer().str();
 }
-
 
 int main(int argc, char **argv) {
 
-    // 1. Handle Options
 
-    // 2. Initialize ASTContext
+                    //TODO: This should be moved
+                    InitializeNativeTarget();
+                    InitializeNativeTargetAsmPrinter();
+                    InitializeNativeTargetAsmParser();
 
-    // 3. Initialize Driver
+                    // Initialize the JIT
+                    TheJIT = llvm::make_unique<KaleidoscopeJIT>();
 
-    // 4. Passes:
-        // 4.1 Parsing pass
-        // 4.2 AST Dumping pass
-        // 4.3 CodeGen pass
+                    // Setup the module
+                    InitializeModule();
+
+                    //                // Link in the stdlib
+                    //                auto M = ParseInputIR("lib/stdlib/stdlib.ll");
+                    //                bool LinkErr = llvm::Linker::linkModules(*TheModule, std::move(M));
+                    //                if (LinkErr) {
+                    //                    fprintf(stderr, "Error linking modules");
+                    //                }
+
+                    // Add the current debug info version into the module
+                    TheModule->addModuleFlag(Module::Warning, "Debug Info Version",
+                                             DEBUG_METADATA_VERSION);
+
+                    // Darwin only supports dwarf2.
+                    if (Triple(sys::getProcessTriple()).isOSDarwin())
+                        TheModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+
+                    // Construct the DIBuilder, we do this here because we need the module.
+                    DBuilder = llvm::make_unique<DIBuilder>(*TheModule);
+
+                    // Create the compile unit for the module.
+                    // Currently down as fib.yk as a filename since we're redirecting stdin
+                    // but we'd like actual source locations.
+                    // TODO: If this isn't building from STDIN, we should use the filename here to enable source debugging.
+                    KSDbgInfo.TheCU = DBuilder->createCompileUnit(dwarf::DW_LANG_C, "fib.yk", ".",
+                                                                  "Yorkie Compiler", 0, "", 0);
 
 
-
-
+    // 1. Handle command line options
     llvm::cl::HideUnrelatedOptions( CompilerCategory );
     llvm::cl::ParseCommandLineOptions(argc,argv);
-    handleCommandLineOptions();
 
+    // 2. Initialize ASTContext
+    ASTContext astContext = ASTContext(InputFilename);
 
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
+    // 3. Initialize Driver
+    auto driver = Yorkie::Driver();
 
-    // Install standard binary operators
-    // 1 is lowest precendence
-    Parser::BinopPrecedence['='] = 2;
-    Parser::BinopPrecedence['<'] = 10;
-    Parser::BinopPrecedence['+'] = 20;
-    Parser::BinopPrecedence['-'] = 30;
-    Parser::BinopPrecedence['*'] = 40; // Highest
-
+    //TODO: hacky for now, but prime the old style lexer.
+    auto lexer = Lexer::Lexer(fileContentsFromCommandLineOptions());
+    //TODO: This should be moved.
     // Prime the first token.
     lexer.getNextToken();
 
-    // Initialize the JIT
-    TheJIT = llvm::make_unique<KaleidoscopeJIT>();
+    // 4. Initialize Parser
+    auto parser = Parser();
 
-    // Setup the module
-    InitializeModule();
+    // 5. Passes
+    // 5.1. Parsing pass
 
-    // Link in the stdlib
-    auto M = ParseInputIR("lib/stdlib/stdlib.ll");
-    bool LinkErr = llvm::Linker::linkModules(*TheModule, std::move(M));
-    if (LinkErr) {
-        fprintf(stderr, "Error linking modules");
-    }
+    driver.add(Yorkie::Pass("Lexing and parsing", astContext, [&lexer, &astContext, &parser]{
+        parser.ParseTopLevel(lexer, astContext);
+        return astContext;
+    }));
 
-    // Add the current debug info version into the module
-    TheModule->addModuleFlag(Module::Warning, "Debug Info Version",
-            DEBUG_METADATA_VERSION);
+    // 5.2. AST Dumping pass.
 
-    // Darwin only supports dwarf2.
-    if (Triple(sys::getProcessTriple()).isOSDarwin())
-        TheModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+    // 6. Run all the passes
+    driver.run();
 
-    // Construct the DIBuilder, we do this here because we need the module.
-    DBuilder = llvm::make_unique<DIBuilder>(*TheModule);
 
-    // Create the compile unit for the module.
-    // Currently down as fib.yk as a filename since we're redirecting stdin
-    // but we'd like actual source locations.
-    // TODO: If this isn't building from STDIN, we should use the filename here to enable source debugging.
-    KSDbgInfo.TheCU = DBuilder->createCompileUnit(dwarf::DW_LANG_C, "fib.yk", ".",
-            "Yorkie Compiler", 0, "", 0);
 
-    // Run the main "interpreter loop" now.
-    MainLoop();
+
+
+
+
+
 
     // Finalize the debug info.
     DBuilder->finalize();

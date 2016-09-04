@@ -61,24 +61,25 @@ target_link_libraries(yorkie ${llvm_libs} ${LLVM_SYSTEM_LIBS})
 # Tests
 #################################################################################
 
+#TODO: This is commented out for now!
 
 # Enable testing
-enable_testing()
+#enable_testing()
 
 # Setup test target 
-set(PROJECT_TEST_NAME ${PROJECT_NAME_STR}_test)
-add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
+#set(PROJECT_TEST_NAME ${PROJECT_NAME_STR}_test)
+#add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
 
 # Add test files
-file(GLOB TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/test/*.cpp)
-include_directories(${GTEST_INCLUDE_DIRS} ${YORKIE_SRC})
-add_executable(${PROJECT_TEST_NAME} ${TEST_SRC_FILES})
-add_dependencies(${PROJECT_TEST_NAME} googletest)
+#file(GLOB TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/test/*.cpp)
+#include_directories(${GTEST_INCLUDE_DIRS} ${YORKIE_SRC})
+#add_executable(${PROJECT_TEST_NAME} ${TEST_SRC_FILES})
+#add_dependencies(${PROJECT_TEST_NAME} googletest)
 
 # Link against gtest libs
-target_link_libraries(${PROJECT_TEST_NAME}
-    ${GTEST_LIBS_DIR}/libgtest.a
-    ${GTEST_LIBS_DIR}/libgtest_main.a
-)
+#target_link_libraries(${PROJECT_TEST_NAME}
+#    ${GTEST_LIBS_DIR}/libgtest.a
+#    ${GTEST_LIBS_DIR}/libgtest_main.a
+#)
 
-add_test(test1 ${PROJECT_TEST_NAME})
+#add_test(test1 ${PROJECT_TEST_NAME})
