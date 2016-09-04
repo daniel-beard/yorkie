@@ -758,9 +758,6 @@ int main(int argc, char **argv) {
 
     //TODO: hacky for now, but prime the old style lexer.
     auto lexer = Lexer::Lexer(fileContentsFromCommandLineOptions());
-    //TODO: This should be moved.
-    // Prime the first token.
-    lexer.getNextToken();
 
     // 4. Initialize Parser
     auto parser = Parser();

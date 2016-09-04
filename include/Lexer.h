@@ -71,6 +71,9 @@ public:
     Lexer() {}
     Lexer(std::string source) : SourceString(source) {
         SourceIterator = SourceString.begin();
+        //TODO: This should be moved.
+        // Prime the first token.
+        getNextToken();
     }
 
     // Accessors for private member declarations
