@@ -9,7 +9,15 @@
 //
 //===============================================
 
+#include "ASTContext.h"
+
 class CodeGen {
+
+public:
+    CodeGen();
+    void run(ASTContext context);
+
+private:
 
 };
 

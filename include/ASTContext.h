@@ -6,8 +6,8 @@
 //
 //
 
-#ifndef ASTContext_hpp
-#define ASTContext_hpp
+#ifndef YORKIE_ASTCONTEXT_H
+#define YORKIE_ASTCONTEXT_H
 
 #include <stdio.h>
 #include <iostream>
@@ -31,4 +31,4 @@ public:
 
 };
 
-#endif /* ASTContext_h */
+#endif
