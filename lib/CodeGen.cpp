@@ -24,6 +24,8 @@
 #include "llvm/Linker/Linker.h"
 #include "../include/KaleidoscopeJIT.h"
 #include "Utils.h"
+#include "AST.h"
+#include "ASTContext.h"
 
 using namespace llvm;
 using namespace llvm::orc;

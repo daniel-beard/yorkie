@@ -26,7 +26,8 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 # Generated from `llvm-config --cxxflags --ldflags --system-libs --libs`
 # Not entirely sure why we have to strip newlines from here. :/
 # TODO: Figure out how to override -isysroot properly... :(
-EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' ' | sed 's/10.10/10.11/g'"
+#EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' ' | sed 's/10.10/10.11/g'"
+EXEC_PROGRAM("llvm-config --cxxflags --ldflags --system-libs --libs | tr '\n' ' '" 
             OUTPUT_VARIABLE LLVM_CONFIG)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} ${LLVM_CONFIG} -stdlib=libc++ -lc++abi")

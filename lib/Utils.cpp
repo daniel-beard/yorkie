@@ -1,4 +1,6 @@
 #include "Utils.h"
+#include "Lexer.h"
+#include "AST.h"
 
 // =============================================================================
 // Error* - These are little helper functions for error handling.

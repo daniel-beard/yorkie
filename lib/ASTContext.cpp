@@ -7,6 +7,7 @@
 //
 
 #include "ASTContext.h"
+#include "AST.h"
 
 void ASTContext::addFunction(std::unique_ptr<FunctionAST> function) {
 

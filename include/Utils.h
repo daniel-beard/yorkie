@@ -8,10 +8,13 @@
 //
 //===============================================
 
-#include "AST.h"
 #include "llvm/IR/Value.h"
 #include <memory>
-#include "Lexer.h"
+
+class ExprAST;
+class PrototypeAST;
+class FunctionAST;
+namespace Lexer { class Lexer; }
 
 std::unique_ptr<ExprAST> Error(const char *Str, Lexer::Lexer &lexer);
 std::unique_ptr<PrototypeAST> ErrorP(const char *Str, Lexer::Lexer &lexer);

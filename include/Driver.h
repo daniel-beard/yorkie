@@ -12,23 +12,21 @@
 #include <vector>
 #include <functional>
 #include <utility>
-#include "ASTContext.h"
+#include <string>
 
+class ASTContext;
 typedef std::function<ASTContext(void)> PassClosure;
 
 namespace Yorkie {
 
 class Pass {
 public:
-    Pass(std::string Name, ASTContext Context, PassClosure Function) :
-        Name(Name), Context(Context), Function(Function) {}
-
-    //TODO: Might need to take into account ASTContext here...
-    void run();
+    Pass(std::string Name, PassClosure Function) :
+        Name(Name), Function(Function) {}
+    void run(ASTContext context);
 
 private:
     std::string Name;
-    ASTContext Context;
     PassClosure Function;
 };
 
@@ -36,14 +34,12 @@ class Driver {
 
 public:
     Driver() { }
-    void run();
+    void run(ASTContext context);
     void add(Pass pass);
 
 private:
     std::vector<Pass> Passes = {};
-
 };
-
 }
 
 #endif /* Driver_h */

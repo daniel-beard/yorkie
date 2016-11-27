@@ -12,8 +12,9 @@
 #include <stdio.h>
 #include <iostream>
 #include "llvm/ADT/ArrayRef.h"
-#include "AST.h"
 #include <functional>
+
+class FunctionAST;
 
 class ASTContext {
 

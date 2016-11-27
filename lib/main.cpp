@@ -1,6 +1,5 @@
 
 #include "llvm/ADT/STLExtras.h"
-
 #include "llvm/Support/CommandLine.h"
 #include <cctype>
 #include <cstdio>
@@ -13,13 +12,12 @@
 #include <memory>
 #include "ASTContext.h"
 #include "ASTDumper.h"
+#include "ASTVisitor.h"
 #include "Lexer.h"
 #include "AST.h"
 #include "Parser.h"
 #include "Utils.h"
 #include "Driver.h"
-#include "ASTContext.h"
-
 
 using namespace llvm;
 
@@ -116,22 +114,22 @@ int main(int argc, char **argv) {
     // 5. Passes
     // 5.1. Parsing pass
 
-    driver.add(Yorkie::Pass("Lexing and parsing", astContext, [&lexer, &astContext, &parser]{
+    driver.add(Yorkie::Pass("Lexing and parsing", [&lexer, &astContext, &parser]{
         parser.ParseTopLevel(lexer, astContext);
         return astContext;
     }));
 
     // 5.2. AST Dumping pass.
     if (PrintAST) {
-        driver.add(Yorkie::Pass("AST Dump", astContext, [&astContext]{
-            auto astDumper = ASTDumper(astContext);
-            astDumper.run();
+        driver.add(Yorkie::Pass("AST Dump", [&astContext]{
+            auto astDumper = ASTDumper();
+            astDumper.run(astContext);
             return astContext;
         }));
     }
 
     // 6. Run all the passes
-    driver.run();
+    driver.run(astContext);
 
     return 0;
 }

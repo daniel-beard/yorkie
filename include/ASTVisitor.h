@@ -6,10 +6,22 @@
 //
 //
 
-#ifndef YORKIE_ASTCONTEXT_H
-#define YORKIE_ASTCONTEXT_H
+#ifndef YORKIE_ASTVISITOR_H
+#define YORKIE_ASTVISITOR_H
 
-#include "AST.h"
+// Forward declarations
+class ExprAST;
+class CompoundExprAST;
+class NumberExprAST;
+class VariableExprAST;
+class VarExprAST;
+class BinaryExprAST;
+class CallExprAST;
+class PrototypeAST;
+class FunctionAST;
+class IfExprAST;
+class ForExprAST;
+class UnaryExprAST;
 
 class ASTVisitor {
 public:

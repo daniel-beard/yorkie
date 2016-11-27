@@ -5,8 +5,6 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
-#include "Lexer.h"
-#include "ASTContext.h"
 
 //===============================================
 // Parser.h
@@ -15,10 +13,12 @@
 //
 //===============================================
 
-// Forward declare AST Classes
+// Forward declares
 class ExprAST;
 class FunctionAST;
 class PrototypeAST;
+class ASTContext;
+namespace Lexer { class Lexer; }
 
 class Parser {
 

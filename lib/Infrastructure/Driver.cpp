@@ -1,4 +1,5 @@
 
+#include "ASTContext.h"
 #include "Driver.h"
 
 using namespace Yorkie;
@@ -7,7 +8,7 @@ using namespace Yorkie;
 // Passes
 // ================================================================
 
-void Pass::run() {
+void Pass::run(ASTContext context) {
     Function();
 }
 
@@ -15,9 +16,9 @@ void Pass::run() {
 // Driver
 // ================================================================
 
-void Driver::run() {
+void Driver::run(ASTContext context) {
     for (Pass pass : Passes) {
-        pass.run();
+        pass.run(context);
     }
 }
 

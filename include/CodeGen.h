@@ -9,7 +9,7 @@
 //
 //===============================================
 
-#include "ASTContext.h"
+class ASTContext;
 
 class CodeGen {
 
