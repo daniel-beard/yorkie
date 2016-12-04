@@ -15,7 +15,7 @@
 #include <string>
 
 class ASTContext;
-typedef std::function<ASTContext(void)> PassClosure;
+typedef std::function<void(void)> PassClosure;
 
 namespace Yorkie {
 
@@ -23,7 +23,7 @@ class Pass {
 public:
     Pass(std::string Name, PassClosure Function) :
         Name(Name), Function(Function) {}
-    void run(ASTContext context);
+    void run();
 
 private:
     std::string Name;
@@ -34,7 +34,7 @@ class Driver {
 
 public:
     Driver() { }
-    void run(ASTContext context);
+    void run();
     void add(Pass pass);
 
 private:

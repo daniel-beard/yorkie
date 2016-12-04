@@ -281,8 +281,8 @@ Function *FunctionAST::codegen() {
 
     //TODO: THIS WILL BREAK THINGS
     // If this is an operator, install it in the BinopPrecedence map.
-    //    if (P.isBinaryOp())
-    //        BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
+//        if (P.isBinaryOp())
+//            BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
 
     // Want to make sure that the function doesn't already have a body before we generate one.
     if (!TheFunction->empty())

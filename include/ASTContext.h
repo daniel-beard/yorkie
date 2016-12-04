@@ -11,21 +11,25 @@
 
 #include <stdio.h>
 #include <iostream>
-#include "llvm/ADT/ArrayRef.h"
+#include <vector>
 #include <functional>
+#include "AST.h"
 
-class FunctionAST;
+typedef std::vector<std::unique_ptr<FunctionAST>> FunctionCollectionType;
 
 class ASTContext {
 
 private:
     std::string FileName;
-    llvm::ArrayRef<FunctionAST> Functions;
 
 public:
+    // Members
+    std::unique_ptr<FunctionCollectionType> Functions;
 
     // Initializer
-    ASTContext(std::string FileName) : FileName(FileName) {}
+    explicit ASTContext(std::string FileName) : FileName(FileName) {
+        Functions = llvm::make_unique<FunctionCollectionType>(FunctionCollectionType());
+    }
 
     // Methods
     void addFunction(std::unique_ptr<FunctionAST> function);

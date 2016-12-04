@@ -1,4 +1,5 @@
 
+
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include <cctype>
@@ -116,7 +117,11 @@ int main(int argc, char **argv) {
 
     driver.add(Yorkie::Pass("Lexing and parsing", [&lexer, &astContext, &parser]{
         parser.ParseTopLevel(lexer, astContext);
-        return astContext;
+
+//        for (auto function : astContext.Functions) {
+//            std::cout << function.Name << std::endl;
+//        }
+//        std::cout << "" << std::endl;
     }));
 
     // 5.2. AST Dumping pass.
@@ -124,12 +129,11 @@ int main(int argc, char **argv) {
         driver.add(Yorkie::Pass("AST Dump", [&astContext]{
             auto astDumper = ASTDumper();
             astDumper.run(astContext);
-            return astContext;
         }));
     }
 
     // 6. Run all the passes
-    driver.run(astContext);
+    driver.run();
 
     return 0;
 }

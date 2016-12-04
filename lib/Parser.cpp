@@ -22,7 +22,7 @@ Parser::Parser() {
 // Top-Level parsing and JIT Driver
 // ================================================================
 
-void Parser::HandleDefinition(Lexer::Lexer &lexer, ASTContext context) {
+void Parser::HandleDefinition(Lexer::Lexer &lexer, ASTContext &context) {
     if (auto FnAST = ParseDefinition(lexer)) {
         context.addFunction(std::move(FnAST));
 //        if (!FnAST->codegen()) {
@@ -63,7 +63,7 @@ void Parser::HandleTopLevelExpression(Lexer::Lexer &lexer) {
 // at the command line.
 // - E.g. allows you to type 4+5; and the parser will know you are done.
 // top ::= definition | external | expression | ';'
-void Parser::ParseTopLevel(Lexer::Lexer &lexer, ASTContext context) {
+void Parser::ParseTopLevel(Lexer::Lexer &lexer, ASTContext &context) {
     while (1) {
         switch(lexer.getCurTok()) {
             case Lexer::tok_eof:

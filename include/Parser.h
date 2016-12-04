@@ -31,14 +31,14 @@ private:
     //TODO: Probably a better way to define these as private.
     void HandleTopLevelExpression(Lexer::Lexer &lexer);
     void HandleExtern(Lexer::Lexer &lexer);
-    void HandleDefinition(Lexer::Lexer &lexer, ASTContext context);
+    void HandleDefinition(Lexer::Lexer &lexer, ASTContext &context);
     int GetTokPrecedence(Lexer::Lexer &lexer);
 
 public:
 
     Parser();
 
-    void ParseTopLevel(Lexer::Lexer &lexer, ASTContext context);
+    void ParseTopLevel(Lexer::Lexer &lexer, ASTContext &context);
 
     std::unique_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer);
     std::unique_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer);

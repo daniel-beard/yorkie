@@ -8,7 +8,7 @@ using namespace Yorkie;
 // Passes
 // ================================================================
 
-void Pass::run(ASTContext context) {
+void Pass::run() {
     Function();
 }
 
@@ -16,9 +16,9 @@ void Pass::run(ASTContext context) {
 // Driver
 // ================================================================
 
-void Driver::run(ASTContext context) {
+void Driver::run() {
     for (Pass pass : Passes) {
-        pass.run(context);
+        pass.run();
     }
 }
 

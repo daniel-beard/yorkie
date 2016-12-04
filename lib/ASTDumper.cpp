@@ -12,7 +12,7 @@
 #include "ASTVisitor.h"
 #include "ASTDumper.h"
 
-void ASTDumper::run(ASTContext context) {
+void ASTDumper::run(ASTContext &context) {
 
 }
 

@@ -44,7 +44,7 @@ private:
 public:
     ASTDumper() {};
     ~ASTDumper() {};
-    void run(ASTContext context);
+    void run(ASTContext &context);
 };
 
 #endif /* ASTDumper_h */
