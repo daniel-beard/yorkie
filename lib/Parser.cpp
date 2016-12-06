@@ -24,7 +24,7 @@ Parser::Parser() {
 
 void Parser::HandleDefinition(Lexer::Lexer &lexer, ASTContext &context) {
     if (auto FnAST = ParseDefinition(lexer)) {
-        context.addFunction(std::move(FnAST));
+        context.addFunction(FnAST);
 //        if (!FnAST->codegen()) {
 //            fprintf(stderr, "Error reading function definition:");
 //        }
@@ -109,7 +109,7 @@ int Parser::GetTokPrecedence(Lexer::Lexer &lexer) {
 // the function is allowed to eat.
 // binoprhs
 //  ::= ('+' primary)*
-std::unique_ptr<ExprAST> Parser::ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS, Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseBinOpRHS(int ExprPrec, std::shared_ptr<ExprAST> LHS, Lexer::Lexer &lexer) {
     // if this is a binop, find its precendence
     while (1) {
         int TokPrec = GetTokPrecedence(lexer);
@@ -138,7 +138,7 @@ std::unique_ptr<ExprAST> Parser::ParseBinOpRHS(int ExprPrec, std::unique_ptr<Exp
                 return nullptr;
         }
         // Merge LHS/RHS
-        LHS = llvm::make_unique<BinaryExprAST>(BinLoc, BinOp, std::move(LHS), std::move(RHS));
+        LHS = std::make_shared<BinaryExprAST>(BinLoc, BinOp, std::move(LHS), std::move(RHS));
     } // loop around to the top of the while loop
 }
 
@@ -147,7 +147,7 @@ std::unique_ptr<ExprAST> Parser::ParseBinOpRHS(int ExprPrec, std::unique_ptr<Exp
 // prototype
 //  ::= id '(' id* ')'
 //  ::= binary LETTER number? (id, id)
-std::unique_ptr<PrototypeAST> Parser::ParsePrototype(Lexer::Lexer &lexer) {
+std::shared_ptr<PrototypeAST> Parser::ParsePrototype(Lexer::Lexer &lexer) {
     std::string FnName;
 
     Lexer::SourceLocation FnLoc = lexer.getLexLoc();
@@ -209,20 +209,20 @@ std::unique_ptr<PrototypeAST> Parser::ParsePrototype(Lexer::Lexer &lexer) {
     if (Kind > 0 && ArgNames.size() != Kind)
         return ErrorP("Invalid number of operands for operator", lexer);
 
-    return llvm::make_unique<PrototypeAST>(FnLoc, FnName, ArgNames, Kind != 0,
+    return std::make_shared<PrototypeAST>(FnLoc, FnName, ArgNames, Kind != 0,
             BinaryPrecedence);
 }
 
 // Function definition, just a prototype plus expressions (separated by ';') to implement the body
 // definition ::= 'def' prototype expression; expression; ... 'end'
-std::unique_ptr<FunctionAST> Parser::ParseDefinition(Lexer::Lexer &lexer) {
+std::shared_ptr<FunctionAST> Parser::ParseDefinition(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat def.
     auto Proto = ParsePrototype(lexer);
     if (!Proto) return nullptr;
 
     // Vector to store function body expressions
-    typedef std::vector<std::unique_ptr<ExprAST>> FunctionBodyType;
-    auto BodyExprs = llvm::make_unique<FunctionBodyType>(FunctionBodyType());
+    typedef std::vector<std::shared_ptr<ExprAST>> FunctionBodyType;
+    auto BodyExprs = std::make_shared<FunctionBodyType>(FunctionBodyType());
 
     while (lexer.getCurTok() != Lexer::tok_end) {
 
@@ -230,7 +230,7 @@ std::unique_ptr<FunctionAST> Parser::ParseDefinition(Lexer::Lexer &lexer) {
         // ...
 
         // Parse body expressions
-        std::unique_ptr<ExprAST> E = ParseExpression(lexer);
+        std::shared_ptr<ExprAST> E = ParseExpression(lexer);
         if (!E)
             return nullptr;
         BodyExprs->push_back(std::move(E));
@@ -250,13 +250,13 @@ std::unique_ptr<FunctionAST> Parser::ParseDefinition(Lexer::Lexer &lexer) {
 
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(BodyExprs));
+    return std::make_shared<FunctionAST>(std::move(Proto), std::move(BodyExprs));
 }
 
 // Support extern to declare functions like 'sin' and 'cos' as well as to support
 // forward declarations of user functions. These are just prototypes with no body.
 // external ::= 'extern' prototype
-std::unique_ptr<PrototypeAST> Parser::ParseExtern(Lexer::Lexer &lexer) {
+std::shared_ptr<PrototypeAST> Parser::ParseExtern(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat extern.
     return ParsePrototype(lexer);
 }
@@ -264,16 +264,16 @@ std::unique_ptr<PrototypeAST> Parser::ParseExtern(Lexer::Lexer &lexer) {
 // Arbitrary top level expressions and evaluate on the fly.
 // Will handle this by defining anonymous nullary (zero argument) functions for them
 // toplevelexpr ::= expression
-std::unique_ptr<FunctionAST> Parser::ParseTopLevelExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<FunctionAST> Parser::ParseTopLevelExpr(Lexer::Lexer &lexer) {
     Lexer::SourceLocation FnLoc = lexer.getLexLoc();
     if (auto E = ParseExpression(lexer)) {
         // Make anonymous proto
-        auto Proto = llvm::make_unique<PrototypeAST>(FnLoc, "main", std::vector<std::string>());
+        auto Proto = std::make_shared<PrototypeAST>(FnLoc, "main", std::vector<std::string>());
 
-        typedef std::vector<std::unique_ptr<ExprAST>> FunctionBodyType;
-        auto Body = llvm::make_unique<FunctionBodyType>(FunctionBodyType());
+        typedef std::vector<std::shared_ptr<ExprAST>> FunctionBodyType;
+        auto Body = std::make_shared<FunctionBodyType>(FunctionBodyType());
         Body->push_back(std::move(E));
-        return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+        return std::make_shared<FunctionAST>(std::move(Proto), std::move(Body));
     }
     return nullptr;
 }
@@ -286,7 +286,7 @@ std::unique_ptr<FunctionAST> Parser::ParseTopLevelExpr(Lexer::Lexer &lexer) {
 // unary
 //  ::= primary
 //  ::= '!' unary
-std::unique_ptr<ExprAST> Parser::ParseUnary(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseUnary(Lexer::Lexer &lexer) {
     // If the current token is not an operator, it must be a primary expr.
     if (!isascii(lexer.getCurTok()) || lexer.getCurTok() == '(' || lexer.getCurTok() == ',')
         return ParsePrimary(lexer);
@@ -295,7 +295,7 @@ std::unique_ptr<ExprAST> Parser::ParseUnary(Lexer::Lexer &lexer) {
     int Opc = lexer.getCurTok();
     lexer.getNextToken(); // eat unary operator
     if (auto Operand = ParseUnary(lexer))
-        return llvm::make_unique<UnaryExprAST>(lexer.getLexLoc(), Opc, std::move(Operand));
+        return std::make_shared<UnaryExprAST>(lexer.getLexLoc(), Opc, std::move(Operand));
     return nullptr;
 }
 
@@ -303,7 +303,7 @@ std::unique_ptr<ExprAST> Parser::ParseUnary(Lexer::Lexer &lexer) {
 // [binop, primaryexpr] pairs.
 // expression
 //  ::= primary binoprhs
-std::unique_ptr<ExprAST> Parser::ParseExpression(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseExpression(Lexer::Lexer &lexer) {
     auto LHS = ParseUnary(lexer);
     if (!LHS)
         return nullptr;
@@ -313,10 +313,10 @@ std::unique_ptr<ExprAST> Parser::ParseExpression(Lexer::Lexer &lexer) {
 
 // varexpr ::= 'var' identifier ('=' expression)?
 //                  (',' identifier ('=' expression)?* 'in' expression 'end'
-std::unique_ptr<ExprAST> Parser::ParseVarExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseVarExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the 'var'.
 
-    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    std::vector<std::pair<std::string, std::shared_ptr<ExprAST>>> VarNames;
 
     // At least on variable name is required.
     if (lexer.getCurTok() != Lexer::tok_identifier)
@@ -328,7 +328,7 @@ std::unique_ptr<ExprAST> Parser::ParseVarExpr(Lexer::Lexer &lexer) {
         lexer.getNextToken(); // eat identifier
 
         // Read the optional initializer.
-        std::unique_ptr<ExprAST> Init;
+        std::shared_ptr<ExprAST> Init;
         if (lexer.getCurTok() == '=') {
             lexer.getNextToken(); // eat the '='
 
@@ -362,13 +362,13 @@ std::unique_ptr<ExprAST> Parser::ParseVarExpr(Lexer::Lexer &lexer) {
         return Error("expected 'end' after 'var'", lexer);
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<VarExprAST>(lexer.getLexLoc(), std::move(VarNames), std::move(Body));
+    return std::make_shared<VarExprAST>(lexer.getLexLoc(), std::move(VarNames), std::move(Body));
 }
 
 // For expression parsing
 // The step value is optional
 // forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
-std::unique_ptr<ExprAST> Parser::ParseForExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseForExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the for.
 
     if (lexer.getCurTok() != Lexer::tok_identifier)
@@ -393,7 +393,7 @@ std::unique_ptr<ExprAST> Parser::ParseForExpr(Lexer::Lexer &lexer) {
         return nullptr;
 
     // The step value is optional
-    std::unique_ptr<ExprAST> Step;
+    std::shared_ptr<ExprAST> Step;
     if (lexer.getCurTok() == ',') {
         lexer.getNextToken(); // eat ','
         Step = ParseExpression(lexer);
@@ -413,16 +413,14 @@ std::unique_ptr<ExprAST> Parser::ParseForExpr(Lexer::Lexer &lexer) {
         return Error("expected 'end' after for", lexer);
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<ForExprAST>(lexer.getLexLoc(), IdName, std::move(Start),
+    return std::make_shared<ForExprAST>(lexer.getLexLoc(), IdName, std::move(Start),
             std::move(End), std::move(Step), std::move(Body));
 }
 
 // If expression parsing
 // ifexpr ::= 'if' expression 'then' expression 'else' expression 'end'
-std::unique_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat the if
-
-    std::cout << "PARSING IF STATMENT" << std::endl;
 
     // condition
     auto Cond = ParseExpression(lexer);
@@ -449,7 +447,7 @@ std::unique_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
         return Error("expected 'end' after if expression", lexer);
     lexer.getNextToken(); // eat 'end'
 
-    return llvm::make_unique<IfExprAST>(lexer.getLexLoc(), std::move(Cond), std::move(Then), std::move(Else));
+    return std::make_shared<IfExprAST>(lexer.getLexLoc(), std::move(Cond), std::move(Then), std::move(Else));
 }
 
 // Parenthesis Operator
@@ -458,7 +456,7 @@ std::unique_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
 // We return null on an error.
 // We recursively call ParseExpression, this is powerful because we can handle recursive grammars.
 // parenexpr ::= '(' expression ')'
-std::unique_ptr<ExprAST> Parser::ParseParenExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseParenExpr(Lexer::Lexer &lexer) {
     lexer.getNextToken(); // eat (.
     auto V = ParseExpression(lexer);
     if (!V)
@@ -475,8 +473,8 @@ std::unique_ptr<ExprAST> Parser::ParseParenExpr(Lexer::Lexer &lexer) {
 // Takes the current number and creates a `NumberExprAST` node, advances to the next token
 // and returns.
 // numberexpr ::= number
-std::unique_ptr<ExprAST> Parser::ParseNumberExpr(Lexer::Lexer &lexer) {
-    auto Result = llvm::make_unique<NumberExprAST>(lexer.getLexLoc(), lexer.getNumVal());
+std::shared_ptr<ExprAST> Parser::ParseNumberExpr(Lexer::Lexer &lexer) {
+    auto Result = std::make_shared<NumberExprAST>(lexer.getLexLoc(), lexer.getNumVal());
     lexer.getNextToken(); // consume the number
     return std::move(Result);
 }
@@ -488,17 +486,17 @@ std::unique_ptr<ExprAST> Parser::ParseNumberExpr(Lexer::Lexer &lexer) {
 // identifierexpr
 //  ::= identifier
 //  ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> Parser::ParseIndentifierExpr(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParseIndentifierExpr(Lexer::Lexer &lexer) {
     std::string IdName = lexer.getIdentifierStr();
 
     lexer.getNextToken(); // eat identifier
 
     if (lexer.getCurTok() != '(') // Simple variable ref
-        return llvm::make_unique<VariableExprAST>(lexer.getLexLoc(), IdName);
+        return std::make_shared<VariableExprAST>(lexer.getLexLoc(), IdName);
 
     // Call.
     lexer.getNextToken(); // Eat (
-    std::vector<std::unique_ptr<ExprAST>> Args;
+    std::vector<std::shared_ptr<ExprAST>> Args;
     if (lexer.getCurTok() != ')') {
         while (1) {
             if (auto Arg = ParseExpression(lexer)) {
@@ -519,7 +517,7 @@ std::unique_ptr<ExprAST> Parser::ParseIndentifierExpr(Lexer::Lexer &lexer) {
     // Eat the ')'.
     lexer.getNextToken();
 
-    return llvm::make_unique<CallExprAST>(lexer.getLexLoc(), IdName, std::move(Args));
+    return std::make_shared<CallExprAST>(lexer.getLexLoc(), IdName, std::move(Args));
 }
 
 // primary
@@ -529,7 +527,7 @@ std::unique_ptr<ExprAST> Parser::ParseIndentifierExpr(Lexer::Lexer &lexer) {
 //  ::= ifexpr
 //  ::= forexpr
 //  ::= varexpr
-std::unique_ptr<ExprAST> Parser::ParsePrimary(Lexer::Lexer &lexer) {
+std::shared_ptr<ExprAST> Parser::ParsePrimary(Lexer::Lexer &lexer) {
     switch (lexer.getCurTok()) {
         default:
             return Error("unknown token when expecting an expression", lexer);

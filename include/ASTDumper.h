@@ -28,6 +28,8 @@ class UnaryExprAST;
 class ASTDumper: public virtual ASTVisitor {
 
 private:
+    int Indent;
+
     void visitExpr(ExprAST expr);
     void visitCompoundExpr(CompoundExprAST expr);
     void visitNumberExpr(NumberExprAST expr);
@@ -42,7 +44,7 @@ private:
     void visitUnaryExpr(UnaryExprAST expr);
 
 public:
-    ASTDumper() {};
+    ASTDumper() { Indent = 0; };
     ~ASTDumper() {};
     void run(ASTContext &context);
 };

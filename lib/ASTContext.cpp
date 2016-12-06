@@ -9,6 +9,6 @@
 #include "AST.h"
 #include "ASTContext.h"
 
-void ASTContext::addFunction(std::unique_ptr<FunctionAST> function) {
-    Functions->push_back(std::move(function));
+void ASTContext::addFunction(std::shared_ptr<FunctionAST> function) {
+    Functions.push_back(std::move(function));
 }

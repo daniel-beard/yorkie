@@ -40,20 +40,20 @@ public:
 
     void ParseTopLevel(Lexer::Lexer &lexer, ASTContext &context);
 
-    std::unique_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseNumberExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseParenExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseIfExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseForExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseVarExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseExpression(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseUnary(Lexer::Lexer &lexer);
-    std::unique_ptr<FunctionAST> ParseTopLevelExpr(Lexer::Lexer &lexer);
-    std::unique_ptr<PrototypeAST> ParseExtern(Lexer::Lexer &lexer);
-    std::unique_ptr<FunctionAST> ParseDefinition(Lexer::Lexer &lexer);
-    std::unique_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer);
-    std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS, Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParsePrimary(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseIndentifierExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseNumberExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseParenExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseIfExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseForExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseVarExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseExpression(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseUnary(Lexer::Lexer &lexer);
+    std::shared_ptr<FunctionAST> ParseTopLevelExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<PrototypeAST> ParseExtern(Lexer::Lexer &lexer);
+    std::shared_ptr<FunctionAST> ParseDefinition(Lexer::Lexer &lexer);
+    std::shared_ptr<PrototypeAST> ParsePrototype(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::shared_ptr<ExprAST> LHS, Lexer::Lexer &lexer);
 
 };
 

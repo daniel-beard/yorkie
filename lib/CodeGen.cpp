@@ -103,7 +103,7 @@ static std::unique_ptr<Module> TheModule;
 static std::map<std::string, AllocaInst*> NamedValues;
 static std::unique_ptr<llvm::legacy::FunctionPassManager> TheFPM;
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
-static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+static std::map<std::string, std::shared_ptr<PrototypeAST>> FunctionProtos;
 
 // CreateEntryBlockAlloca - Create an alloca instruction in the entry block of the function.
 // This is used for mutable variables etc.
@@ -633,7 +633,7 @@ void InitializeModule(void) {
 // Public Methods
 // ================================================================
 
-void CodeGen::run(ASTContext context) {
+void CodeGen::run(ASTContext &context) {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
@@ -670,14 +670,20 @@ void CodeGen::run(ASTContext context) {
     KSDbgInfo.TheCU = DBuilder->createCompileUnit(dwarf::DW_LANG_C, "fib.yk", ".",
                                                   "Yorkie Compiler", 0, "", 0);
 
-
-    //TODO: Code gen here:!!!!!!!!
-
+    // Code gen all the functions
+    for (auto function : context.Functions) {
+        function->codegen();
+    }
 
     // Finalize the debug info.
     DBuilder->finalize();
 
     // Print out all of the generated code
     TheModule->dump();
+    
+}
+
+// Constructor
+CodeGen::CodeGen() {
     
 }

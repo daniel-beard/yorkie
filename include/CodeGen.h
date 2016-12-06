@@ -15,7 +15,7 @@ class CodeGen {
 
 public:
     CodeGen();
-    void run(ASTContext context);
+    void run(ASTContext &context);
 
 private:
 

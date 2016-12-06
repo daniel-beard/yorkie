@@ -16,12 +16,12 @@ class PrototypeAST;
 class FunctionAST;
 namespace Lexer { class Lexer; }
 
-std::unique_ptr<ExprAST> Error(const char *Str, Lexer::Lexer &lexer);
-std::unique_ptr<PrototypeAST> ErrorP(const char *Str, Lexer::Lexer &lexer);
-std::unique_ptr<FunctionAST> ErrorF(const char *Str, Lexer::Lexer &lexer);
+std::shared_ptr<ExprAST> Error(const char *Str, Lexer::Lexer &lexer);
+std::shared_ptr<PrototypeAST> ErrorP(const char *Str, Lexer::Lexer &lexer);
+std::shared_ptr<FunctionAST> ErrorF(const char *Str, Lexer::Lexer &lexer);
 
 // Simple Errors (no line numbers)
-std::unique_ptr<ExprAST> Error(const char *Str);
+std::shared_ptr<ExprAST> Error(const char *Str);
 llvm::Value *ErrorV(const char *Str);
 
 #endif

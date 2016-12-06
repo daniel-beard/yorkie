@@ -15,7 +15,7 @@
 #include <functional>
 #include "AST.h"
 
-typedef std::vector<std::unique_ptr<FunctionAST>> FunctionCollectionType;
+typedef std::vector<std::shared_ptr<FunctionAST>> FunctionCollectionType;
 
 class ASTContext {
 
@@ -24,15 +24,15 @@ private:
 
 public:
     // Members
-    std::unique_ptr<FunctionCollectionType> Functions;
+    FunctionCollectionType Functions;
 
     // Initializer
     explicit ASTContext(std::string FileName) : FileName(FileName) {
-        Functions = llvm::make_unique<FunctionCollectionType>(FunctionCollectionType());
+        Functions = FunctionCollectionType();
     }
 
     // Methods
-    void addFunction(std::unique_ptr<FunctionAST> function);
+    void addFunction(std::shared_ptr<FunctionAST> function);
 
 };
 

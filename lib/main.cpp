@@ -19,6 +19,7 @@
 #include "Parser.h"
 #include "Utils.h"
 #include "Driver.h"
+#include "CodeGen.h"
 
 using namespace llvm;
 
@@ -41,7 +42,7 @@ extern "C" double printd(double X) {
 // ================================================================
 // Module loading code.
 // ================================================================
-//static std::unique_ptr<Module> ParseInputIR(std::string InputFile) {
+//static std::shared_ptr<Module> ParseInputIR(std::string InputFile) {
 //    SMDiagnostic Err;
 //    auto M = parseIRFile(InputFile, Err, getGlobalContext());
 //    if (!M) {
@@ -70,27 +71,27 @@ static cl::opt<bool> PrintAST ("print-ast", cl::desc("Prints out the AST to stdo
 
 //static void handleCommandLineOptions() {
 //    // Open the file to compile.
-//    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+//    ErrorOr<std::shared_ptr<MemoryBuffer>> FileOrErr =
 //    MemoryBuffer::getFileOrSTDIN(InputFilename);
 //    if (std::error_code EC = FileOrErr.getError()) {
 //        errs() << "Could not open input file '" << InputFilename
 //        << "': " << EC.message() << '\n';
 //        exit(2);
 //    }
-//    std::unique_ptr<MemoryBuffer> &File = FileOrErr.get();
+//    std::shared_ptr<MemoryBuffer> &File = FileOrErr.get();
 //
 //    // Initialize the lexer with the source
 //    lexer = Lexer::Lexer(File->getBuffer().str());
 //}
 
 std::string fileContentsFromCommandLineOptions() {
-    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr = MemoryBuffer::getFile(InputFilename);
+    ErrorOr<std::shared_ptr<MemoryBuffer>> FileOrErr = MemoryBuffer::getFile(InputFilename);
     if (std::error_code EC = FileOrErr.getError()) {
         errs() << "Could not open input file '" << InputFilename
         << "': " << EC.message() << '\n';
         exit(2);
     }
-    std::unique_ptr<MemoryBuffer> &File = FileOrErr.get();
+    std::shared_ptr<MemoryBuffer> &File = FileOrErr.get();
     return File->getBuffer().str();
 }
 
@@ -117,11 +118,6 @@ int main(int argc, char **argv) {
 
     driver.add(Yorkie::Pass("Lexing and parsing", [&lexer, &astContext, &parser]{
         parser.ParseTopLevel(lexer, astContext);
-
-//        for (auto function : astContext.Functions) {
-//            std::cout << function.Name << std::endl;
-//        }
-//        std::cout << "" << std::endl;
     }));
 
     // 5.2. AST Dumping pass.
@@ -131,6 +127,12 @@ int main(int argc, char **argv) {
             astDumper.run(astContext);
         }));
     }
+
+    // 5.3 Codegen
+    auto codegen = CodeGen();
+    driver.add(Yorkie::Pass("Code Generation", [&codegen, &astContext]{
+        codegen.run(astContext);
+    }));
 
     // 6. Run all the passes
     driver.run();
