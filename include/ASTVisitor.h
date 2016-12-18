@@ -25,18 +25,18 @@ class UnaryExprAST;
 
 class ASTVisitor {
 public:
-    virtual void visitExpr(ExprAST expr) = 0;
-    virtual void visitCompoundExpr(CompoundExprAST expr) = 0;
-    virtual void visitNumberExpr(NumberExprAST expr) = 0;
-    virtual void visitVariableExpr(VariableExprAST expr) = 0;
-    virtual void visitVarExpr(VarExprAST expr) = 0;
-    virtual void visitBinaryExpr(BinaryExprAST expr) = 0;
-    virtual void visitCallExpr(CallExprAST expr) = 0;
-    virtual void visitPrototype(PrototypeAST prototype) = 0;
+    virtual void visitExpr(ExprAST *expr) = 0;
+    virtual void visitCompoundExpr(CompoundExprAST *expr) = 0;
+    virtual void visitNumberExpr(NumberExprAST *expr) = 0;
+    virtual void visitVariableExpr(VariableExprAST *expr) = 0;
+    virtual void visitVarExpr(VarExprAST *expr) = 0;
+    virtual void visitBinaryExpr(BinaryExprAST *expr) = 0;
+    virtual void visitCallExpr(CallExprAST *expr) = 0;
+    virtual void visitPrototype(PrototypeAST *prototype) = 0;
     virtual void visitFunction(FunctionAST function) = 0;
-    virtual void visitIfExpr(IfExprAST expr) = 0;
-    virtual void visitForExpr(ForExprAST expr) = 0;
-    virtual void visitUnaryExpr(UnaryExprAST expr) = 0;
+    virtual void visitIfExpr(IfExprAST *expr) = 0;
+    virtual void visitForExpr(ForExprAST *expr) = 0;
+    virtual void visitUnaryExpr(UnaryExprAST *expr) = 0;
 
     virtual ~ASTVisitor() = 0;
 };

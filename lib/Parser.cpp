@@ -450,6 +450,11 @@ std::shared_ptr<ExprAST> Parser::ParseIfExpr(Lexer::Lexer &lexer) {
     return std::make_shared<IfExprAST>(lexer.getLexLoc(), std::move(Cond), std::move(Then), std::move(Else));
 }
 
+// Compound expression parsing
+std::shared_ptr<ExprAST> Parser::ParseCompoundExpr(Lexer::Lexer &lexer) {
+#warning TODO: Implement this fully.
+}
+
 // Parenthesis Operator
 // Demonstrates error routines, expects that the current token is `(`, but there may not be
 // a corresponding `)` token.

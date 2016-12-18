@@ -123,8 +123,12 @@ int main(int argc, char **argv) {
     // 5.2. AST Dumping pass.
     if (PrintAST) {
         driver.add(Yorkie::Pass("AST Dump", [&astContext]{
-            auto astDumper = ASTDumper();
+            std::string buf;
+            llvm::raw_string_ostream OS(buf);
+            auto astDumper = ASTDumper(OS, 0);
             astDumper.run(astContext);
+            OS.flush();
+            std::cout << OS.str() << std::flush;
         }));
     }
 

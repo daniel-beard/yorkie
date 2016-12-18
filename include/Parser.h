@@ -45,6 +45,7 @@ public:
     std::shared_ptr<ExprAST> ParseNumberExpr(Lexer::Lexer &lexer);
     std::shared_ptr<ExprAST> ParseParenExpr(Lexer::Lexer &lexer);
     std::shared_ptr<ExprAST> ParseIfExpr(Lexer::Lexer &lexer);
+    std::shared_ptr<ExprAST> ParseCompoundExpr(Lexer::Lexer &lexer);
     std::shared_ptr<ExprAST> ParseForExpr(Lexer::Lexer &lexer);
     std::shared_ptr<ExprAST> ParseVarExpr(Lexer::Lexer &lexer);
     std::shared_ptr<ExprAST> ParseExpression(Lexer::Lexer &lexer);

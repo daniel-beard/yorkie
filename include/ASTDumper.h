@@ -10,6 +10,7 @@
 #define YORKIE_ASTDUMPER_H
 
 #include "ASTVisitor.h"
+#include <llvm/Support/raw_ostream.h>
 
 // Forward declarations
 class ExprAST;
@@ -29,22 +30,24 @@ class ASTDumper: public virtual ASTVisitor {
 
 private:
     int Indent;
+    //std::string OutputString;
+    llvm::raw_string_ostream &Stream;
 
-    void visitExpr(ExprAST expr);
-    void visitCompoundExpr(CompoundExprAST expr);
-    void visitNumberExpr(NumberExprAST expr);
-    void visitVariableExpr(VariableExprAST expr);
-    void visitVarExpr(VarExprAST expr);
-    void visitBinaryExpr(BinaryExprAST expr);
-    void visitCallExpr(CallExprAST expr);
-    void visitPrototype(PrototypeAST prototype);
+    void visitExpr(ExprAST *expr);
+    void visitCompoundExpr(CompoundExprAST *expr);
+    void visitNumberExpr(NumberExprAST *expr);
+    void visitVariableExpr(VariableExprAST *expr);
+    void visitVarExpr(VarExprAST *expr);
+    void visitBinaryExpr(BinaryExprAST *expr);
+    void visitCallExpr(CallExprAST *expr);
+    void visitPrototype(PrototypeAST *prototype);
     void visitFunction(FunctionAST function);
-    void visitIfExpr(IfExprAST expr);
-    void visitForExpr(ForExprAST expr);
-    void visitUnaryExpr(UnaryExprAST expr);
+    void visitIfExpr(IfExprAST *expr);
+    void visitForExpr(ForExprAST *expr);
+    void visitUnaryExpr(UnaryExprAST *expr);
 
 public:
-    ASTDumper() { Indent = 0; };
+    ASTDumper(llvm::raw_string_ostream &Stream, int Indent): Indent(Indent), Stream(Stream) {};
     ~ASTDumper() {};
     void run(ASTContext &context);
 };
