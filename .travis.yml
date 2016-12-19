@@ -5,7 +5,7 @@ compiler:
 before_install:
 - xcrun --show-sdk-path
 - brew update
-- brew install cmake
+- command -v cmake >/dev/null 2>&1 || { brew install cmake; }
 - scripts/./osx.sh
 - export PATH="$(pwd)/llvm/bin":$PATH
 - which llvm-config
